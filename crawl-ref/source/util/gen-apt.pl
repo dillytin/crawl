@@ -130,7 +130,6 @@ sub aptitude_table
         next if $sp eq 'Lava Orc';
         next if $sp eq 'Centaur';
         next if $sp eq 'Halfling';
-        next if $sp eq 'Mayflytaur';
 
         my $line = '';
         $line .= fix_draco_species($sp, \$seen_draconian_length);
