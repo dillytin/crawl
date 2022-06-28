@@ -1022,7 +1022,7 @@ spret cast_airstrike(int pow, coord_def target, bool fail)
 
     const int empty_space = airstrike_space_around(target, true);
 
-    int hurted = 5 + empty_space + random2avg(2 + div_rand_round(pow, 7), 2);
+    int hurted = empty_space * 2 + random2avg(2 + div_rand_round(pow, 7), 2);
 #ifdef DEBUG_DIAGNOSTICS
     const int preac = hurted;
 #endif
@@ -1842,8 +1842,12 @@ dice_def irradiate_damage(int pow, bool random)
 static int _irradiate_cell(coord_def where, int pow, const actor &agent)
 {
     actor *act = actor_at(where);
-    if (!act || !act->alive())
+    if (!act || !act->alive()
+        || act->is_monster() && mons_is_conjured(act->as_monster()->type))
+    {
         return 0;
+    }
+
     const bool hitting_player = act->is_player();
 
     const dice_def dam_dice = irradiate_damage(pow);
@@ -1892,6 +1896,7 @@ spret cast_irradiate(int powc, actor &caster, bool fail)
     auto vulnerable = [&caster](const actor *act) -> bool
     {
         return !act->is_player()
+               && !mons_is_conjured(act->as_monster()->type)
                && !god_protects(&caster, act->as_monster());
     };
 
@@ -2584,45 +2589,6 @@ spret cast_discharge(int pow, const actor &agent, bool fail, bool prompt)
     return spret::success;
 }
 
-pair<int, item_def *> sandblast_find_ammo()
-{
-    item_def *stone = nullptr;
-    int num_stones = 0;
-    for (item_def& i : you.inv)
-    {
-        if (i.is_type(OBJ_MISSILES, MI_STONE)
-            && check_warning_inscriptions(i, OPER_DESTROY))
-        {
-            num_stones += i.quantity;
-            stone = &i;
-        }
-    }
-    return make_pair(num_stones, stone);
-}
-
-spret cast_sandblast(int pow, bolt &beam, bool fail)
-{
-    auto ammo = sandblast_find_ammo();
-
-    if (ammo.first == 0 || !ammo.second)
-    {
-        mpr("You don't have any stones to cast with.");
-        return spret::abort;
-    }
-
-    const spret ret = zapping(ZAP_SANDBLAST, pow, beam, true, nullptr, fail);
-
-    if (ret == spret::success)
-    {
-        if (dec_inv_item_quantity(letter_to_index(ammo.second->slot), 1))
-            mpr("You now have no stones remaining.");
-        else if (!you.quiver_action.spell_is_quivered(SPELL_SANDBLAST))
-            mprf_nocap("%s", ammo.second->name(DESC_INVENTORY).c_str());
-    }
-
-    return ret;
-}
-
 static bool _elec_not_immune(const actor *act)
 {
     return act->res_elec() < 3 && !god_protects(act->as_monster());
@@ -3136,6 +3102,27 @@ spret cast_unravelling(coord_def target, int pow, bool fail)
     return spret::success;
 }
 
+// XXX: this should take a monster_info.
+string mons_inner_flame_immune_reason(const monster *mons)
+{
+    if (!mons || !you.can_see(*mons))
+        return "You can't see anything there.";
+
+    if (mons->has_ench(ENCH_INNER_FLAME))
+    {
+        return make_stringf("%s is already burning with an inner flame!",
+                            mons->name(DESC_THE).c_str());
+    }
+
+    if (mons->willpower() == WILL_INVULN)
+    {
+        return make_stringf("%s has infinite will and cannot be affected.",
+                            mons->name(DESC_THE).c_str());
+    }
+
+    return "";
+}
+
 spret cast_inner_flame(coord_def target, int pow, bool fail)
 {
     if (cell_is_solid(target))
@@ -3145,21 +3132,12 @@ spret cast_inner_flame(coord_def target, int pow, bool fail)
     }
 
     const monster* mons = monster_at(target);
-    if (!mons || !you.can_see(*mons))
+    const string immune_reason = mons_inner_flame_immune_reason(mons);
+    if (!immune_reason.empty())
     {
-        mpr("You can't see anything there.");
+        mprf("%s", immune_reason.c_str());
         return spret::abort;
     }
-
-    if (mons->has_ench(ENCH_INNER_FLAME))
-    {
-        mprf("%s is already burning with an inner flame!",
-             mons->name(DESC_THE).c_str());
-        return spret::abort;
-    }
-
-    if (stop_attack_prompt(mons, false, you.pos()))
-        return spret::abort;
 
     bolt beam;
     beam.source = mons->pos();

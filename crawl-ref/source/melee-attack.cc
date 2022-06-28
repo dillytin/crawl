@@ -75,6 +75,7 @@ melee_attack::melee_attack(actor *attk, actor *defn,
 {
     attack_occurred = false;
     damage_brand = attacker->damage_brand(attack_number);
+    weapon = attacker->weapon(attack_number);
     init_attack(SK_UNARMED_COMBAT, attack_number);
     if (weapon && !using_weapon())
         wpn_skill = SK_FIGHTING;
@@ -185,7 +186,8 @@ bool melee_attack::handle_phase_attempted()
         }
         else if (!cleave_targets.empty())
         {
-            targeter_cleave hitfunc(attacker, defender->pos());
+            const int range = you.reach_range() == REACH_TWO ? 2 : 1;
+            targeter_cleave hitfunc(attacker, defender->pos(), range);
             if (stop_attack_prompt(hitfunc, "attack"))
             {
                 cancel_attack = true;
@@ -359,12 +361,7 @@ bool melee_attack::handle_phase_dodged()
 
         if (defender->is_player())
         {
-            const bool using_fencers = player_equip_unrand(UNRAND_FENCERS)
-                && (!defender->weapon()
-                    || is_melee_weapon(*defender->weapon()));
-            if (using_fencers && one_chance_in(3) && !is_riposte) // no ping-pong!
-                riposte();
-
+            maybe_riposte();
             // Retaliations can kill!
             if (!attacker->alive())
                 return false;
@@ -372,6 +369,15 @@ bool melee_attack::handle_phase_dodged()
     }
 
     return true;
+}
+
+void melee_attack::maybe_riposte()
+{
+    const bool using_fencers = player_equip_unrand(UNRAND_FENCERS)
+        && (!defender->weapon()
+            || is_melee_weapon(*defender->weapon()));
+    if (using_fencers && one_chance_in(3) && !is_riposte) // no ping-pong!
+        riposte();
 }
 
 void melee_attack::apply_black_mark_effects()
@@ -787,7 +793,15 @@ bool melee_attack::attack()
     }
 
     if (shield_blocked)
+    {
         handle_phase_blocked();
+        maybe_riposte();
+        if (!attacker->alive())
+        {
+            handle_phase_end();
+            return false;
+        }
+    }
     else
     {
         if (attacker != defender
@@ -1096,12 +1110,12 @@ class AuxTouch: public AuxAttackType
 {
 public:
     AuxTouch()
-    : AuxAttackType(3, 40, "touch") { };
+    : AuxAttackType(6, 40, "touch") { };
 
     int get_damage() const override
     {
         return damage
-               + random2(1 + you.get_mutation_level(MUT_DEMONIC_TOUCH) * 2);
+               + random2(1 + you.get_mutation_level(MUT_DEMONIC_TOUCH) * 4);
     }
 
     int get_brand() const override
@@ -1285,11 +1299,11 @@ bool melee_attack::player_aux_apply(unarmed_attack_type atk)
 
     if (atk != UNAT_TOUCH)
     {
-        aux_damage  = player_stat_modify_damage(aux_damage);
+        aux_damage  = stat_modify_damage(aux_damage, SK_UNARMED_COMBAT, false);
 
         aux_damage  = random2(aux_damage);
 
-        aux_damage  = player_apply_fighting_skill(aux_damage, true);
+        aux_damage  = apply_fighting_skill(aux_damage, true, true);
 
         aux_damage  = player_apply_misc_modifiers(aux_damage);
 
@@ -3265,9 +3279,9 @@ void melee_attack::do_minotaur_retaliation()
 
     // Use the same damage formula as a regular headbutt.
     int dmg = AUX_HEADBUTT.get_damage();
-    dmg = player_stat_modify_damage(dmg);
+    dmg = stat_modify_damage(dmg, SK_UNARMED_COMBAT, false);
     dmg = random2(dmg);
-    dmg = player_apply_fighting_skill(dmg, true);
+    dmg = apply_fighting_skill(dmg, true, true);
     dmg = player_apply_misc_modifiers(dmg);
     dmg = player_apply_slaying_bonuses(dmg, true);
     dmg = player_apply_final_multipliers(dmg, true);
@@ -3349,7 +3363,8 @@ bool melee_attack::do_knockback(bool trample)
         || actor_at(new_pos)
         // Prevent trample/drown combo when flight is expiring
         || defender->is_player() && need_expiration_warning(new_pos)
-        || defender->is_constricted())
+        || defender->is_constricted()
+        || defender->resists_dislodge(needs_message ? "being knocked back" : ""))
     {
         if (needs_message)
         {

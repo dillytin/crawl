@@ -3333,9 +3333,9 @@ MONS: emperor scorpion / w:8 green death / w:3 ghost moth
 : else
 MONS: skeletal warrior ; long sword ego:venom | broad axe ego:venom \
       | halberd ego:venom
-MONS: reaper ; scythe ego:venom / w:8 green death \
-      / ancient champion ; great mace ego:venom | battleaxe ego:venom \
-      | glaive ego:venom
+MONS: reaper ; halberd itemname:scythe tile:wpn_scythe wtile:scythe ego:venom /\
+      w:8 green death / ancient champion ; great mace ego:venom | \
+      battleaxe ego:venom | glaive ego:venom
 : end
 KMONS: A = lich
 KFEAT: A = stone_arch
@@ -3579,7 +3579,7 @@ DEPTH:   Depths:2-, !Depths:$
 ORIENT:  float
 # The dances of angels and devils, of blessed birds and antagonist serpents...
 # and perhaps the stinger plunging into the poor toro de lidia?
-MONS:    dancing weapon ; scythe ego:antimagic
+MONS:    dancing weapon ; glaive ego:antimagic
 MONS:    cherub, rakshasa, angel / daeva, balrug / blizzard demon
 MONS:    caustic shrike, shadow dragon
 KMONS:   8 = tengu reaver
@@ -4781,7 +4781,7 @@ DEPTH:  D:3-13
 ORIENT: float
 KMASK:  LM = no_item_gen
 ITEM:   wand of flame
-ITEM:   wand of iceblast / wand of acid
+ITEM:   wand of iceblast / any beam wand
 ITEM:   wand of mindburst / wand of paralysis \
         / wand of charming / wand of polymorph w:5
 MONS: shadow imp, orc priest, kobold demonologist
@@ -4918,6 +4918,7 @@ ORIENT: float
 KMASK:  -'DE12 = no_item_gen
 # Cancellation placed only for mutagenic clouds.
 ITEM:   potion of resistance ident:type, potion of cancellation ident:type q:2
+# TODO: add scrolls of poison when appropriate
 # Replaces a gold pile in late Dungeon
 : item(dgn.good_aux_armour)
 # Monsters appropriate for the cloud type must be defined in order of
@@ -5565,7 +5566,8 @@ DEPTH:  D:10-, Orc, Depths, Zot
 ORIENT: float
 MONS:   hornet, orc sorcerer / ogre mage, fenstrider witch / great orb of eyes
 MONS:   sphinx / vampire knight, dread lich, floating eye
-ITEM:   wand of paralysis
+# scroll of vulnerability as fallback if paralysis isn't generated this game
+ITEM:   wand of paralysis w:9999 / scroll of vulnerability w:1
 NSUBST: 6 = 1:6 / *:6.
 : if you.in_branch("D") and you.absdepth() < 13 then
 NSUBST:  - = 20 = 1... / 1:2 / *:.

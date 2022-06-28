@@ -206,6 +206,7 @@ static void _ench_animation(int flavour, const monster* mon, bool force)
     case BEAM_AGONY:
     case BEAM_VILE_CLUTCH:
     case BEAM_VAMPIRIC_DRAINING:
+    case BEAM_NECROTIZE:
         elem = ETC_UNHOLY;
         break;
     case BEAM_DISPEL_UNDEAD:
@@ -604,6 +605,7 @@ static beam_type _chaos_beam_flavour(bolt* beam)
           5, BEAM_POLYMORPH,
          // Seen through miscast effects.
           5, BEAM_ACID,
+          5, BEAM_LIGHT,
           5, BEAM_DAMNATION,
           5, BEAM_STICKY_FLAME,
           5, BEAM_MINDBURST,
@@ -851,7 +853,7 @@ void bolt::bounce()
 void bolt::fake_flavour()
 {
     if (real_flavour == BEAM_RANDOM)
-        flavour = static_cast<beam_type>(random_range(BEAM_FIRE, BEAM_ACID));
+        flavour = static_cast<beam_type>(random_range(BEAM_FIRST_RANDOM, BEAM_LAST_RANDOM));
     else if (real_flavour == BEAM_CHAOS)
         flavour = _chaos_beam_flavour(this);
     else if (real_flavour == BEAM_CRYSTAL && flavour == BEAM_CRYSTAL)
@@ -3336,7 +3338,7 @@ void bolt::affect_player_enchantment(bool resistible)
         break;
 
     case BEAM_PARALYSIS:
-        you.paralyse(agent(), 2 + random2(6));
+        you.paralyse(agent(), random_range(2, 5));
         obvious_effect = true;
         break;
 
@@ -3894,6 +3896,9 @@ void bolt::affect_player()
         was_affected = (!was_parad && you.duration[DUR_PARALYSIS]) || was_affected;
 
     }
+
+    if (flavour == BEAM_LIGHT && one_chance_in(3))
+        confuse_player(random_range(2, 3));
 
     if (flavour == BEAM_MIASMA && final_dam > 0)
         was_affected = miasma_player(agent(), name);
@@ -4575,12 +4580,25 @@ void bolt::monster_post_hit(monster* mon, int dmg)
         simple_monster_message(*mon, " is paralysed.");
         mon->add_ench(mon_enchant(ENCH_PARALYSIS, 1, agent(), BASELINE_DELAY));
     }
+
+    if (flavour == BEAM_LIGHT && !mon->has_ench(ENCH_BLIND))
+    {
+        const int dur = max(1, div_rand_round(54, mon->get_hit_dice())) * BASELINE_DELAY;
+        auto ench = mon_enchant(ENCH_BLIND, 1, agent(),
+                                random_range(dur, dur * 2));
+        if (mon->add_ench(ench))
+            simple_monster_message(*mon, " is blinded.");
+    }
 }
 
 void bolt::knockback_actor(actor *act, int dam)
 {
-    if (!act || !can_knockback(*act, dam))
+    if (!act
+        || !can_knockback(*act, dam)
+        || act->resists_dislodge("being knocked back"))
+    {
         return;
+    }
 
     const int distance =
         (origin_spell == SPELL_FORCE_LANCE
@@ -5203,6 +5221,7 @@ bool ench_flavour_affects_monster(beam_type flavour, const monster* mon,
         break;
 
     case BEAM_PAIN:
+    case BEAM_NECROTIZE:
         rc = mon->res_negative_energy(intrinsic_only) < 3;
         break;
 
@@ -5254,7 +5273,8 @@ bool ench_flavour_affects_monster(beam_type flavour, const monster* mon,
         break;
 
     case BEAM_INFESTATION:
-        rc = mons_gives_xp(*mon, you) && !mon->has_ench(ENCH_INFESTATION);
+        rc = (mons_gives_xp(*mon, you) || mon->props.exists(KIKU_WRETCH_KEY))
+             && !mon->has_ench(ENCH_INFESTATION);
         break;
 
     case BEAM_VILE_CLUTCH:
@@ -5453,19 +5473,38 @@ mon_resist_type bolt::apply_enchantment_to_monster(monster* mon)
     case BEAM_PAIN:
     {
         const int dam = resist_adjust_damage(mon, flavour, damage.roll());
-        if (dam)
+        if (!dam)
+            return MON_UNAFFECTED;
+        if (you.see_cell(mon->pos()))
         {
-            if (you.see_cell(mon->pos()))
-            {
-                mprf("%s writhes in agony%s",
-                     mon->name(DESC_THE).c_str(),
-                     attack_strength_punctuation(dam).c_str());
-                obvious_effect = true;
-            }
-            mon->hurt(agent(), dam, flavour);
-            return MON_AFFECTED;
+            mprf("%s writhes in agony%s",
+                 mon->name(DESC_THE).c_str(),
+                 attack_strength_punctuation(dam).c_str());
+            obvious_effect = true;
         }
-        return MON_UNAFFECTED;
+        mon->hurt(agent(), dam, flavour);
+        return MON_AFFECTED;
+    }
+
+    case BEAM_NECROTIZE:
+    {
+        const int dam = resist_adjust_damage(mon, flavour, damage.roll());
+        if (!dam)
+            return MON_UNAFFECTED;
+        if (you.see_cell(mon->pos()))
+        {
+            mprf("%s writhes in agony%s",
+                 mon->name(DESC_THE).c_str(),
+                 attack_strength_punctuation(dam).c_str());
+            obvious_effect = true;
+        }
+        if (mons_can_be_zombified(*mon)
+            && !mons_class_flag(mon->type, M_NO_SKELETON))
+        {
+            mon->add_ench(mon_enchant(ENCH_NECROTIZE, 0, agent(), 1));
+        }
+        mon->hurt(agent(), dam, flavour);
+        return MON_AFFECTED;
     }
 
     case BEAM_AGONY:
@@ -6377,6 +6416,12 @@ bool bolt::nasty_to(const monster* mon) const
         case BEAM_INNER_FLAME:
             // Co-aligned inner flame is fine.
             return !mons_aligned(mon, agent());
+        case BEAM_NECROTIZE:
+            // HACK: we want to warn when players accidentally aim necrotize
+            // through their skeletal allies. So mark it harmful to pals.
+            if (mons_aligned(mon, agent()))
+                return true;
+            // else fallthrough to generic enchantments
         case BEAM_TELEPORT:
         case BEAM_BECKONING:
         case BEAM_INFESTATION:
@@ -6598,6 +6643,7 @@ static string _beam_type_name(beam_type type)
     case BEAM_POISON:                return "poison";
     case BEAM_NEG:                   return "negative energy";
     case BEAM_ACID:                  return "acid";
+    case BEAM_LIGHT:                 return "light";
     case BEAM_MIASMA:                return "miasma";
     case BEAM_SPORE:                 return "spores";
     case BEAM_POISON_ARROW:          return "poison sting";
@@ -6667,6 +6713,7 @@ static string _beam_type_name(beam_type type)
     case BEAM_VAMPIRIC_DRAINING:     return "vampiric draining";
     case BEAM_CONCENTRATE_VENOM:     return "concentrate venom";
     case BEAM_ENFEEBLE:              return "enfeeble";
+    case BEAM_NECROTIZE:             return "necrotize";
 
     case NUM_BEAMS:                  die("invalid beam type");
     }
@@ -6710,7 +6757,7 @@ bool bolt::can_knockback(const actor &act, int dam) const
  * Can this bolt pull an actor?
  *
  * If a bolt is capable of pulling actors and the given actor can be pulled,
- * return true.
+ * return true. May print messages.
  *
  * @param act The target actor. Check if the actor is non-stationary and not
  *            already adjacent.
@@ -6719,8 +6766,12 @@ bool bolt::can_knockback(const actor &act, int dam) const
 */
 bool bolt::can_pull(const actor &act, int dam) const
 {
-    if (act.is_stationary() || adjacent(source, act.pos()))
+    if (act.is_stationary()
+        || adjacent(source, act.pos())
+        || act.resists_dislodge("being pulled"))
+    {
         return false;
+    }
 
     return origin_spell == SPELL_HARPOON_SHOT && dam;
 }

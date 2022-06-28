@@ -390,7 +390,8 @@ void wind_blast(actor* agent, int pow, coord_def target)
             || ai->pos().distance_from(agent->pos()) > radius
             || ai->pos() == agent->pos() // so it's never aimed_at_feet
             || !target.origin()
-               && _angle_between(agent->pos(), target, ai->pos()) > PI/4.0)
+               && _angle_between(agent->pos(), target, ai->pos()) > PI/4.0
+            || ai->resists_dislodge("being blown about by the wind"))
         {
             continue;
         }
@@ -929,7 +930,7 @@ static bool _xoms_chessboard()
 
     for (monster_near_iterator mi(&you, LOS_NO_TRANS); mi; ++mi)
     {
-        if (mi->friendly() || mi->neutral())
+        if (mi->friendly() || mi->neutral() && !mi->has_ench(ENCH_INSANE))
             continue;
         if (mons_is_firewood(**mi))
             continue;

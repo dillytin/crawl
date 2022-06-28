@@ -262,6 +262,13 @@ void pick_hints(newgame_def& choice)
 
     auto popup = make_shared<ui::Popup>(vbox);
 
+    popup->on_keydown_event([&](const KeyEvent& ev) {
+        auto key = ev.key();
+        if (key == CK_MOUSE_CMD)
+            return done = cancelled = true;
+        return false;
+    });
+
     ui::run_layout(move(popup), done);
 
     if (cancelled)
@@ -769,9 +776,7 @@ void hints_gained_new_skill(skill_type skill)
         break;
 
     // Ranged skills.
-    case SK_SLINGS:
-    case SK_BOWS:
-    case SK_CROSSBOWS:
+    case SK_RANGED_WEAPONS:
         learned_something_new(HINT_GAINED_RANGED_SKILL);
         break;
 
@@ -941,6 +946,11 @@ void hints_first_item(const item_def &item)
         return;
 
     if (!Hints.hints_events[HINT_SEEN_FIRST_OBJECT]
+#ifdef USE_TILE
+        || item.base_type == OBJ_CORPSES
+        // Don't show hints for corpses - they're purely decorative.
+        // In console, it's less obvious what's happening, so hint anyway.
+#endif
         || Hints.hints_just_triggered)
     {
         return;
@@ -1057,7 +1067,6 @@ static bool _tutorial_interesting(hints_event_type event)
     case HINT_FUMBLING_SHALLOW_WATER:
     case HINT_SPELL_MISCAST:
     case HINT_CLOUD_WARNING:
-    case HINT_ANIMATE_CORPSE_SKELETON:
     case HINT_SKILL_RAISE:
     case HINT_OPPORTUNITY_ATTACK:
         return true;
@@ -1205,8 +1214,8 @@ void learned_something_new(hints_event_type seen_what, coord_def gc)
 
         if (Hints.hints_type == HINT_RANGER_CHAR)
         {
-            text << "\nAs you're already trained in Bows, you don't really "
-                    "need another type of ranged attack.";
+            text << "\nAs you're already trained in Ranged Weapons, you don't "
+                    "really need another type of ranged attack.";
         }
         else if (Hints.hints_type == HINT_MAGIC_CHAR)
         {
@@ -1315,7 +1324,8 @@ void learned_something_new(hints_event_type seen_what, coord_def gc)
         text << "are downstairs. You can enter the next (deeper) "
                 "level by following them down (<w>%</w>). To return to "
                 "this level, press <w>%</w> while standing on the "
-                "upstairs.";
+                "upstairs. When you take new stairs, you get a free "
+                "action; after that, monsters get to move first.";
         cmd.push_back(CMD_GO_DOWNSTAIRS);
         cmd.push_back(CMD_GO_UPSTAIRS);
 
@@ -1634,10 +1644,10 @@ void learned_something_new(hints_event_type seen_what, coord_def gc)
         break;
 
     case HINT_GAINED_RANGED_SKILL:
-        text << "Being skilled in a particular type of ranged attack will let "
-                "you deal more damage when using the appropriate weapons. It "
-                "is usually best to concentrate on one type of ranged attack "
-                "(including spells).";
+        text << "Being skilled with ranged weapons will let you deal slightly "
+                "more damage and attack significantly faster with them. "
+                "Remember that wearing heavy armour makes you attack more "
+                "slowly with ranged weapons.";
         break;
 
     case HINT_CHOOSE_STAT:
@@ -2463,10 +2473,6 @@ void learned_something_new(hints_event_type seen_what, coord_def gc)
                 "vanishes (with <w>%</w>), or just step around it.";
         cmd.push_back(CMD_WAIT);
         break;
-    case HINT_ANIMATE_CORPSE_SKELETON:
-        text << "Animate Skeleton works on the corpse of any monster that has "
-                "a skeleton inside.";
-        break;
     default:
         text << "You've found something new (but I don't know what)!";
     }
@@ -2798,7 +2804,7 @@ string hints_describe_item(const item_def &item)
 
                 // Maybe this is a launching weapon?
                 if (is_range_weapon(item))
-                    best_wpskill = best_skill(SK_SLINGS, SK_THROWING);
+                    best_wpskill = SK_THROWING;
                 else
                     best_wpskill = best_skill(SK_SHORT_BLADES, SK_STAVES);
 

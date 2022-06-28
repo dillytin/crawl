@@ -590,12 +590,13 @@ public:
      */
     string transform_message(transformation previous_trans) const override
     {
+#if TAG_MAJOR_VERSION == 34
         if (you.species == SP_DEEP_DWARF && one_chance_in(10))
             return "You inwardly fear your resemblance to a lawn ornament.";
-        else if (you.species == SP_GARGOYLE)
+#endif
+        if (you.species == SP_GARGOYLE)
             return "Your body stiffens and grows slower.";
-        else
-            return Form::transform_message(previous_trans);
+        return Form::transform_message(previous_trans);
     }
 
     /**
@@ -1901,6 +1902,9 @@ bool transform(int pow, transformation which_trans, bool involuntary,
 
     case transformation::shadow:
         drain_player(25, true, true);
+        if (you.duration[DUR_CORONA])
+            you.duration[DUR_CORONA] = 0;
+
         if (you.invisible())
             mpr("You fade into the shadows.");
         else

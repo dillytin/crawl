@@ -32,10 +32,10 @@ ranged_attack::ranged_attack(actor *attk, actor *defn, item_def *proj,
       projectile(proj), teleport(tele), orig_to_hit(0),
       should_alert_defender(true)
 {
+    if (is_launcher_ammo(*projectile))
+        weapon = attacker->weapon(0); // else null
     init_attack(SK_THROWING, 0);
     kill_type = KILLED_BY_BEAM;
-    if (is_throwable(attacker, *projectile) || clumsy_throwing())
-        wpn_skill = SK_THROWING;
 
     string proj_name = projectile->name(DESC_PLAIN);
     // init launch type early, so we can use it later in the constructor
@@ -329,10 +329,7 @@ int ranged_attack::calc_base_unarmed_damage()
 {
     if (clumsy_throwing())
         return 0;
-
-    // Stones get half bonus; everything else gets full bonus.
-    return div_rand_round(you.skill_rdiv(wpn_skill)
-                          * min(4, property(*projectile, PWPN_DAMAGE)), 4);
+    return throwing_base_damage_bonus(*projectile);
 }
 
 int ranged_attack::calc_mon_to_hit_base()

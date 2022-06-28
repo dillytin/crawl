@@ -48,6 +48,7 @@ bool ignite_poison_affects_cell(const coord_def where, actor* agent);
 spret cast_ignite_poison(actor *agent, int pow, bool fail,
                               bool tracer = false);
 spret cast_unravelling(coord_def target, int pow, bool fail);
+string mons_inner_flame_immune_reason(const monster *mons);
 spret cast_inner_flame(coord_def target, int pow, bool fail);
 spret cast_poisonous_vapours(int pow, const dist &beam, bool fail, bool test=false);
 bool safe_discharge(coord_def where, vector<const actor *> &exclude);
@@ -59,8 +60,6 @@ bool setup_fragmentation_beam(bolt &beam, int pow, const actor *caster,
                               const char **what, bool &hole);
 spret cast_fragmentation(int powc, const actor *caster,
                               const coord_def target, bool fail);
-pair<int, item_def *> sandblast_find_ammo();
-spret cast_sandblast(int powc, bolt &beam, bool fail);
 spret cast_polar_vortex(int powc, bool fail);
 void polar_vortex_damage(actor *caster, int dur);
 void cancel_polar_vortex(bool tloc = false);

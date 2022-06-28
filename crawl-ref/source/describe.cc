@@ -71,7 +71,6 @@
 #include "spl-miscast.h"
 #include "spl-summoning.h"
 #include "spl-util.h"
-#include "spl-wpnench.h"
 #include "stash.h"
 #include "state.h"
 #include "stringutil.h" // to_string on Cygwin
@@ -354,19 +353,20 @@ static vector<string> _randart_propnames(const item_def& item,
     const unrandart_entry *entry = nullptr;
     if (is_unrandom_artefact(item))
         entry = get_unrand_entry(item.unrand_idx);
+    const bool skip_ego = is_unrandom_artefact(item)
+                          && entry && entry->flags & UNRAND_FLAG_SKIP_EGO;
 
     // For randart jewellery, note the base jewellery type if it's not
     // covered by artefact_desc_properties()
     if (item.base_type == OBJ_JEWELLERY
-        && (item_ident(item, ISFLAG_KNOW_TYPE)))
+        && (item_ident(item, ISFLAG_KNOW_TYPE)) && !skip_ego)
     {
         const char* type = jewellery_base_ability_string(item.sub_type);
         if (*type)
             propnames.push_back(type);
     }
     else if (item_brand_known(item)
-             && !(is_unrandom_artefact(item) && entry
-                  && entry->flags & UNRAND_FLAG_SKIP_EGO))
+             && !skip_ego)
     {
         string ego;
         if (item.base_type == OBJ_WEAPONS)
@@ -1178,6 +1178,93 @@ static void _append_skill_target_desc(string &description, skill_type skill,
     }
 }
 
+static string _describe_brand(brand_type brand)
+{
+    switch (brand) {
+    case SPWPN_ACID:
+    case SPWPN_CHAOS:
+    case SPWPN_DISTORTION:
+    case SPWPN_DRAINING:
+    case SPWPN_ELECTROCUTION:
+    case SPWPN_FLAMING:
+    case SPWPN_FREEZING:
+    case SPWPN_PAIN:
+    case SPWPN_VORPAL:
+    {
+        const string brand_name = uppercase_first(brand_type_name(brand, true));
+        return make_stringf(" + %s", brand_name.c_str());
+    }
+    default:
+        return "";
+    }
+}
+
+static string _describe_missile_brand(const item_def &item)
+{
+     const string brand_name = missile_brand_name(item, MBN_BRAND);
+
+     if (brand_name.empty())
+         return brand_name;
+
+     return " + " + uppercase_first(brand_name);
+}
+
+static string _damage_rating(const item_def &item)
+{
+    if (is_unrandom_artefact(item, UNRAND_WOE))
+        return "\nDamage rating: your enemies will bleed and die for Makhleb.";
+
+    const bool thrown = item.base_type == OBJ_MISSILES;
+
+    int base_dam = property(item, PWPN_DAMAGE);
+    // TODO: we should include the bonus base damage separately in the display.
+    if (thrown)
+        base_dam += throwing_base_damage_bonus(item);
+    const skill_type skill = _item_training_skill(item);
+    const int stat_mult = stat_modify_damage(100, skill, true);
+    const bool use_str = weapon_uses_strength(skill, true);
+    const int skill_mult = apply_fighting_skill(apply_weapon_skill(100, skill, false), false, false);
+
+    const int slaying = slaying_bonus(false);
+    int plusses = slaying;
+    if (item_ident(item, ISFLAG_KNOW_PLUSES))
+        plusses += item.plus;
+
+    brand_type brand = SPWPN_NORMAL;
+    if (item_type_known(item) && !thrown)
+        brand = get_weapon_brand(item);
+
+    const int DAM_RATE_SCALE = 100;
+    int rating = base_dam * DAM_RATE_SCALE;
+    rating = stat_modify_damage(rating, skill, true);
+    rating = apply_weapon_skill(rating, skill, false);
+    rating = apply_fighting_skill(rating, false, false);
+    rating /= DAM_RATE_SCALE;
+    rating += plusses;
+
+    string plusses_desc;
+    if (plusses)
+    {
+        plusses_desc = make_stringf(" %s %d (%s)",
+                                    plusses < 0 ? "-" : "+",
+                                    abs(plusses),
+                                    slaying && item.plus ? "Ench + Slay" :
+                                               item.plus ? "Ench"
+                                                         : "Slay");
+    }
+
+    return make_stringf(
+        "\nDamage rating: %d (Base %d x %d%% (%s) x %d%% (Skill)%s)%s.",
+        rating,
+        base_dam,
+        stat_mult,
+        use_str ? "Str" : "Dex",
+        skill_mult,
+        plusses_desc.c_str(),
+        thrown ? _describe_missile_brand(item).c_str()
+               : _describe_brand(brand).c_str());
+}
+
 static void _append_weapon_stats(string &description, const item_def &item)
 {
     const int base_dam = property(item, PWPN_DAMAGE);
@@ -1199,16 +1286,31 @@ static void _append_weapon_stats(string &description, const item_def &item)
             skill_name(staff_skill(static_cast<stave_type>(item.sub_type))));
     }
 
-    description += make_stringf(
-    "Base accuracy: %+d  Base damage: %d  Base attack delay: %.1f"
-    "\nThis weapon's minimum attack delay (%.1f) is reached at skill level %d.",
-        property(item, PWPN_HIT),
-        base_dam,
-        (float) property(item, PWPN_SPEED) / 10,
-        (float) weapon_min_delay(item, item_brand_known(item)) / 10,
-        mindelay_skill / 10);
+    if (is_unrandom_artefact(item, UNRAND_WOE))
+    {
+        const char *inf = Options.char_set == CSET_ASCII ? "inf" : "\u221e"; //"∞"
+        description += make_stringf(
+            "Base accuracy: %s  Base damage: %s  ",
+            inf,
+            inf);
+    }
+    else
+    {
+        description += make_stringf(
+            "Base accuracy: %+d  Base damage: %d  ",
+            property(item, PWPN_HIT),
+            base_dam);
+    }
 
-    if (!is_useless_item(item) && crawl_state.need_save)
+    description += make_stringf(
+        "Base attack delay: %.1f\n"
+        "This weapon's minimum attack delay (%.1f) is reached at skill level %d.",
+            (float) property(item, PWPN_SPEED) / 10,
+            (float) weapon_min_delay(item, item_brand_known(item)) / 10,
+            mindelay_skill / 10);
+
+    const bool want_player_stats = !is_useless_item(item) && crawl_state.need_save;
+    if (want_player_stats)
     {
         description += "\n    "
             + _your_skill_desc(skill, can_set_target, mindelay_skill);
@@ -1246,6 +1348,9 @@ static void _append_weapon_stats(string &description, const item_def &item)
         }
         description += ".";
     }
+
+    if (want_player_stats && !is_unrandom_artefact(item, UNRAND_DAMNATION))
+        description += _damage_rating(item);
 }
 
 static string _handedness_string(const item_def &item)
@@ -1279,6 +1384,27 @@ static string _handedness_string(const item_def &item)
 
 }
 
+static string _category_string(const item_def &item)
+{
+    if (is_unrandom_artefact(item, UNRAND_LOCHABER_AXE))
+        return ""; // handled in art-data DBRAND
+
+    string description = "";
+    description += "This ";
+    if (is_unrandom_artefact(item))
+        description += get_artefact_base_name(item);
+    else
+        description += "weapon";
+    description += " falls into the";
+
+    const skill_type skill = item_attack_skill(item);
+
+    description +=
+        make_stringf(" '%s' category. ",
+                     skill == SK_FIGHTING ? "buggy" : skill_name(skill));
+    return description;
+}
+
 static string _describe_weapon(const item_def &item, bool verbose, bool monster)
 {
     string description;
@@ -1298,7 +1424,7 @@ static string _describe_weapon(const item_def &item, bool verbose, bool monster)
                           ? get_weapon_brand(item) : SPWPN_NORMAL;
     const int damtype = get_vorpal_type(item);
 
-    if (verbose)
+    if (verbose && !is_unrandom_artefact(item, UNRAND_LOCHABER_AXE))
     {
         switch (item_attack_skill(item))
         {
@@ -1306,21 +1432,18 @@ static string _describe_weapon(const item_def &item, bool verbose, bool monster)
             description += "\n\nIt can be evoked to extend its reach.";
             break;
         case SK_AXES:
-            description += "\n\nIt hits all enemies adjacent to the wielder, "
-                           "dealing less damage to those not targeted.";
+            description += "\n\nIt hits all enemies adjacent to the wielder";
+            if (!is_unrandom_artefact(item, UNRAND_WOE))
+                description += ", dealing less damage to those not targeted";
+            description += ".";
             break;
         case SK_SHORT_BLADES:
             {
                 string adj = (item.sub_type == WPN_DAGGER) ? "extremely"
                                                            : "particularly";
                 description += "\n\nIt is " + adj + " good for stabbing"
-                               " helpless or unaware enemies, and dexterity"
-                               " rather than strength increases its damage.";
+                               " helpless or unaware enemies.";
             }
-            break;
-        case SK_LONG_BLADES:
-            description += "\n\nIts damage is increased by dexterity instead"
-                           " of by strength.";
             break;
         default:
             break;
@@ -1479,38 +1602,13 @@ static string _describe_weapon(const item_def &item, bool verbose, bool monster)
         }
     }
 
-    if (you.duration[DUR_EXCRUCIATING_WOUNDS] && &item == you.weapon())
-    {
-        description += "\nIt is temporarily rebranded; it is actually ";
-        if ((int) you.props[ORIGINAL_BRAND_KEY] == SPWPN_NORMAL)
-            description += "an unbranded weapon.";
-        else
-        {
-            brand_type original = static_cast<brand_type>(
-                you.props[ORIGINAL_BRAND_KEY].get_int());
-            description += article_a(
-                weapon_brand_desc("weapon", item, false, original) + ".", true);
-        }
-    }
-
     string art_desc = _artefact_descrip(item);
     if (!art_desc.empty())
         description += "\n\n" + art_desc;
 
     if (verbose)
     {
-        description += "\n\nThis ";
-        if (is_unrandom_artefact(item))
-            description += get_artefact_base_name(item);
-        else
-            description += "weapon";
-        description += " falls into the";
-
-        const skill_type skill = item_attack_skill(item);
-
-        description +=
-            make_stringf(" '%s' category. ",
-                         skill == SK_FIGHTING ? "buggy" : skill_name(skill));
+        description += "\n\n" + _category_string(item);
 
         // XX this is shown for felids, does that actually make sense?
         description += _handedness_string(item);
@@ -1629,6 +1727,9 @@ static string _describe_ammo(const item_def &item)
         }
         if (below_target)
             _append_skill_target_desc(description, SK_THROWING, target_skill);
+
+        if (!is_useless_item(item))
+            description += _damage_rating(item);
     }
 
     if (ammo_always_destroyed(item))
@@ -4621,7 +4722,9 @@ static void _describe_monster_wl(const monster_info& mi, ostringstream &result)
 {
     if (mi.willpower() == WILL_INVULN)
     {
-        result << "  Will: ∞\n";
+        result << (Options.char_set == CSET_ASCII
+                        ? "  Will: \u221e\n" // ∞
+                        : "  Will: inf\n");
         return;
     }
 
@@ -4785,6 +4888,8 @@ static string _monster_stat_description(const monster_info& mi, bool mark_spells
         }
     }
 
+    if (mi.is(MB_UNBLINDABLE))
+        base_resists.emplace_back("blinding");
     // Resists engulfing/waterlogging but still dies on falling into deep water.
     if (mi.is(MB_RES_DROWN))
         base_resists.emplace_back("drowning");
@@ -5561,6 +5666,7 @@ int describe_monsters(const monster_info &mi, const string& /*footer*/)
         tiles.json_write_int("fg_idx", t0);
         tiles.json_write_name("flag");
         tiles.write_tileidx(flag);
+        tiles.json_write_icons(status_icons_for(mi));
 
         if (t0 >= TILEP_MCACHE_START)
         {

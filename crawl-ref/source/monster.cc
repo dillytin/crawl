@@ -678,6 +678,7 @@ bool monster::can_throw_large_rocks() const
            || species == MONS_STONE_GIANT
            || species == MONS_CYCLOPS
            || species == MONS_OGRE
+           || type == MONS_PARGHIT // he's stronger than your average troll
            || mons_bound_soul(*this);
 }
 
@@ -1266,11 +1267,6 @@ static bool _is_signature_weapon(const monster* mons, const item_def &weapon)
         weapon_type wtype = (weapon.base_type == OBJ_WEAPONS) ?
             (weapon_type)weapon.sub_type : NUM_WEAPONS;
 
-        // We might allow Sigmund to pick up a better scythe if he finds
-        // one...
-        if (mons->type == MONS_SIGMUND)
-            return wtype == WPN_SCYTHE;
-
         // Crazy Yiuf's got MONUSE_STARTING_EQUIPMENT right now, but
         // in case that ever changes we don't want him to switch away
         // from his quarterstaff of chaos.
@@ -1432,6 +1428,9 @@ bool monster::pickup_melee_weapon(item_def &item, bool msg)
         {
             if (is_range_weapon(*weap))
                 continue;
+
+            if (type == MONS_SIGMUND)
+                continue; // The scythe is a classic. Stick with it.
 
             // Don't swap from a signature weapon to a non-signature one.
             if (!_is_signature_weapon(this, item)
@@ -2896,7 +2895,7 @@ bool monster::asleep() const
     return behaviour == BEH_SLEEP;
 }
 
-bool monster::backlit(bool self_halo) const
+bool monster::backlit(bool self_halo, bool /*temp*/) const
 {
     if (has_ench(ENCH_CORONA) || has_ench(ENCH_STICKY_FLAME)
         || has_ench(ENCH_SILVER_CORONA))
@@ -3860,6 +3859,10 @@ int monster::willpower() const
     if (mons_invuln_will(*this))
         return WILL_INVULN;
 
+    // alas, ye foolish wretches...
+    if (props.exists(KIKU_WRETCH_KEY))
+        return 0;
+
     const item_def *arm = mslot_item(MSLOT_ARMOUR);
     if (arm && is_unrandom_artefact(*arm, UNRAND_FOLLY))
         return 0;
@@ -4249,7 +4252,9 @@ int monster::hurt(const actor *agent, int amount, beam_type flavour,
 
         // Hurt conducts -- pain bond is exempted for balance/gameplay reasons.
         // Damage over time effects are excluded for similar reasons.
-        if (agent && agent->is_player() && mons_gives_xp(*this, *agent)
+        if (agent && agent->is_player()
+            && mons_class_gives_xp(type)
+            && (temp_attitude() == ATT_HOSTILE || has_ench(ENCH_INSANE))
             && flavour != BEAM_SHARED_PAIN
             && flavour != BEAM_STICKY_FLAME
             && kill_type != KILLED_BY_POISON
@@ -5174,7 +5179,7 @@ bool monster::may_have_action_energy() const
 /// At the player's current movement speed, will they eventually outpace this monster?
 bool monster::outpaced_by_player() const
 {
-    return speed * you.time_taken < action_energy(EUT_MOVE) * BASELINE_DELAY;
+    return speed * you.time_taken < energy_cost(EUT_MOVE, 1, BASELINE_DELAY);
 }
 
 /// If a monster had enough energy to act this turn, change it so it doesn't.
@@ -5492,7 +5497,7 @@ int monster::action_energy(energy_use_type et) const
     return max(move_cost, 1);
 }
 
-int monster::energy_cost(energy_use_type et, int div, int mult)
+int monster::energy_cost(energy_use_type et, int div, int mult) const
 {
     int energy_loss  = div_round_up(mult * action_energy(et), div);
     if (has_ench(ENCH_PETRIFYING))
