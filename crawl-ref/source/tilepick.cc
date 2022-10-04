@@ -567,16 +567,10 @@ tileidx_t tileidx_feature(const coord_def &gc)
                 if (env.map_knowledge(*ai).feat() == DNGN_SLIMY_WALL)
                     return TILE_FLOOR_SLIME_ACIDIC;
 
-        if (env.level_state & LSTATE_ICY_WALL)
+        if (env.level_state & LSTATE_ICY_WALL
+            && env.map_knowledge(gc).flags & MAP_ICY)
         {
-            for (adjacent_iterator ai(gc); ai; ++ai)
-            {
-                if (feat_is_wall(env.map_knowledge(*ai).feat())
-                    && env.map_knowledge(*ai).flags & MAP_ICY)
-                {
-                    return TILE_FLOOR_ICY;
-                }
-            }
+            return TILE_FLOOR_ICY;
         }
         // deliberate fall-through
     case DNGN_ROCK_WALL:
@@ -1251,6 +1245,10 @@ static tileidx_t _zombie_tile_to_simulacrum(const tileidx_t z_tile)
         return TILEP_MONS_SIMULACRUM_KRAKEN;
     case TILEP_MONS_ZOMBIE_JELLY:
         return TILEP_MONS_SIMULACRUM_SLIME;
+    case TILEP_MONS_ZOMBIE_ORB:
+        return TILEP_MONS_SIMULACRUM_EYE;
+    case TILEP_MONS_ZOMBIE_X:
+        return TILEP_MONS_SIMULACRUM_X;
     default:
         if (tile_player_basetile(z_tile) == TILEP_MONS_ZOMBIE_HYDRA)
         {
@@ -1346,6 +1344,11 @@ static tileidx_t _zombie_tile_to_skeleton(const tileidx_t z_tile)
             return TILEP_MONS_SKELETON_HYDRA
                    + (z_tile - TILEP_MONS_ZOMBIE_HYDRA);
         }
+        if (tile_player_basetile(z_tile) == TILEP_MONS_LERNAEAN_HYDRA_ZOMBIE)
+        {
+            return TILEP_MONS_LERNAEAN_HYDRA_SKELETON
+                   + (z_tile - TILEP_MONS_LERNAEAN_HYDRA_ZOMBIE);
+        }
     }
     return TILEP_MONS_SKELETON_SMALL;
 }
@@ -1366,7 +1369,8 @@ static tileidx_t _mon_to_zombie_tile(const monster_info &mon)
 
     // hydras get special casing
 
-    if (subtype == MONS_LERNAEAN_HYDRA && mon.type == MONS_ZOMBIE)
+    if (subtype == MONS_LERNAEAN_HYDRA && (mon.type == MONS_ZOMBIE
+                                           || mon.type == MONS_SKELETON))
     {
         // Step down the number of heads to get the appropriate tile:
         // for the last five heads, use tiles 1-5, for greater amounts
@@ -1546,16 +1550,6 @@ tileidx_t tileidx_mon_clamp(tileidx_t tile, int offset)
 }
 
 #ifdef USE_TILE
-// actually, a triangle wave, but it's up to the actual tiles
-static tileidx_t _mon_sinus(tileidx_t tile)
-{
-    int count = tile_player_count(tile);
-    ASSERT(count > 0);
-    ASSERT(count > 1); // technically, staying put would work
-    int n = you.frame_no % (2 * count - 2);
-    return (n < count) ? (tile + n) : (tile + 2 * count - 2 - n);
-}
-
 static tileidx_t _mon_cycle(tileidx_t tile, int offset)
 {
     int count = tile_player_count(tile);
@@ -1829,12 +1823,7 @@ static tileidx_t _tileidx_monster_no_props(const monster_info& mon)
         return _tileidx_monster_zombified(mon);
 
     if (mon.props.exists(MONSTER_TILE_KEY))
-    {
-        tileidx_t t = mon.props[MONSTER_TILE_KEY].get_short();
-        if (t == TILEP_MONS_HELL_WIZARD)
-            return _mon_sinus(t);
-        return t;
-    }
+        return mon.props[MONSTER_TILE_KEY].get_short();
 
     int tile_num = 0;
     if (mon.props.exists(TILE_NUM_KEY))
@@ -2181,6 +2170,7 @@ static const map<monster_info_flags, tileidx_t> status_icons = {
     { MB_CORROSION, TILEI_CORRODED },
     { MB_SWIFT, TILEI_SWIFT },
     { MB_VILE_CLUTCH, TILEI_VILE_CLUTCH },
+    { MB_GRASPING_ROOTS, TILEI_CONSTRICTED }, // XXX placeholder
     { MB_POSSESSABLE, TILEI_POSSESSABLE },
     { MB_WITHERING, TILEI_SLOWLY_DYING },
     { MB_CRUMBLING, TILEI_SLOWLY_DYING },
@@ -2198,6 +2188,10 @@ static const map<monster_info_flags, tileidx_t> status_icons = {
     { MB_CONCENTRATE_VENOM, TILEI_CONC_VENOM },
     { MB_REPEL_MSL, TILEI_REPEL_MISSILES },
     { MB_INJURY_BOND, TILEI_INJURY_BOND },
+    { MB_REFLECTING, TILEI_REFLECTING },
+    { MB_TELEPORTING, TILEI_TELEPORTING },
+    { MB_EMPOWERED_SPELLS, TILEI_BRILLIANCE },
+    { MB_RESISTANCE, TILEI_RESISTANCE },
 };
 
 set<tileidx_t> status_icons_for(const monster_info &mons)
@@ -3530,8 +3524,6 @@ tileidx_t tileidx_ability(const ability_type ability)
 #endif
     case ABIL_HOP:
         return TILEG_ABILITY_HOP;
-    case ABIL_ROLLING_CHARGE:
-        return TILEG_ABILITY_ROLL;
     case ABIL_BLINKBOLT:
         return TILEG_ABILITY_BLINKBOLT;
 
@@ -3965,10 +3957,10 @@ static tileidx_t _tileidx_player_job_base(const job_type job)
             return TILEG_JOB_ARTIFICER;
         case JOB_DELVER:
             return TILEG_JOB_DELVER;
-        case JOB_ARCANE_MARKSMAN:
-            return TILEG_JOB_ARCANE_MARKSMAN;
-        case JOB_ABYSSAL_KNIGHT:
-            return TILEG_JOB_ABYSSAL_KNIGHT;
+        case JOB_HEXSLINGER:
+            return TILEG_JOB_HEXSLINGER;
+        case JOB_REAVER:
+            return TILEG_JOB_REAVER;
         case JOB_CINDER_ACOLYTE:
             return TILEG_JOB_CINDER_ACOLYTE;
         default:
@@ -4001,8 +3993,8 @@ static tileidx_t _tileidx_player_species_base(const species_type species)
             return TILEG_SP_TROLL;
         case SP_BASE_DRACONIAN:
             return TILEG_SP_DRACONIAN;
-        case SP_PALENTONGA:
-            return TILEG_SP_PALENTONGA;
+        case SP_ARMATAUR:
+            return TILEG_SP_ARMATAUR;
         case SP_DEMIGOD:
             return TILEG_SP_DEMIGOD;
         case SP_SPRIGGAN:

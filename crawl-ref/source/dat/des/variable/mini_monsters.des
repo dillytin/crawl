@@ -1666,7 +1666,7 @@ ENDMAP
 
 NAME:   kilobyte_rumbling_trees
 TAGS:   transparent
-DEPTH:  Depths, Elf, Lair:4-
+DEPTH:  Depths, Elf, Lair:3-
 MONS:   black bear / polar bear w:20 / wolf w:20
 MONS:   patrolling boggart, patrolling spriggan druid
 : if you.in_branch("Lair") then
@@ -2442,12 +2442,12 @@ KMONS:  1 = gnoll
 : elseif you.depth() == 2 then
 KMONS:  1 = gnoll band
 : elseif you.depth() == 3 then
-KMONS:  1 = gnoll shaman band / gnoll band
+KMONS:  1 = gnoll bouda band / gnoll band
 : elseif you.depth() == 4 then
-KMONS:  1 = gnoll sergeant band / gnoll shaman band / gnoll band
+KMONS:  1 = gnoll sergeant band / gnoll bouda band / gnoll band
 : else
-KMONS:  1 = gnoll shaman band / gnoll sergeant band / gnoll band
-KMONS:  2 = gnoll shaman / gnoll sergeant
+KMONS:  1 = gnoll bouda band / gnoll sergeant band / gnoll band
+KMONS:  2 = gnoll bouda / gnoll sergeant
 NSUBST: - = 2 / -
 : end
 NSUBST: - = 1 / p```
@@ -2518,7 +2518,7 @@ ENDMAP
 NAME:   dreamdust_gnoll_shepherd
 TAGS:   no_monster_gen no_item_gen transparent
 DEPTH:  D:7-11, Lair
-KMONS:  1 = gnoll shaman ; quarterstaff
+KMONS:  1 = gnoll bouda ; quarterstaff
 KMONS:  2 : yak / dream sheep
 NSUBST: . = 5=2. / .
 MAP
@@ -3195,7 +3195,7 @@ ENDMAP
 # Oklob assault; statistically, three oklobs
 NAME:    dpeg_oklob_1
 TAGS:    transparent
-DEPTH:   Lair:4-
+DEPTH:   Lair:3-
 MONS:    plant, oklob plant, bush
 SUBST:   ? = 1 2:5 '
 SHUFFLE: '"
@@ -8386,7 +8386,7 @@ TAGS:   no_monster_gen
 DEPTH:  D:2-8
 WEIGHT: 3
 ITEM:   woodcutter's axe, hand axe
-MONS:   gnoll, gnoll shaman, gnoll sergeant
+MONS:   gnoll, gnoll bouda, gnoll sergeant
 : if you.depth() < 4 then
 SUBST:  2 = 1
 SUBST:  1 = 1..
@@ -8551,6 +8551,40 @@ a'a'd'a'a
  '''''''
   a'a'a
 ENDMAP
+
+NAME:   hellmonk_guarded_unrand_hermit
+TAGS:   no_monster_gen
+DEPTH:  D:3-8
+WEIGHT: 3
+KFEAT:  _ = altar_ecumenical
+KITEM:  _ = hermit's pendant no_pickup
+NSUBST: E = . / xxx., H = . / xxx., J = . / xxx., L = . / xxx., M = . / xxx.
+NSUBST: N = . / xxx., ' = 8 / .
+SUBST:  D:wWlG, F = xxxxxG.
+TILE:   G = dngn_crumbled_column
+MAP
+  xxx
+ xxxxx
+xxxxxxx
+xx'''xx
+x'''''x
+x.._..x
+xx...xx
+xxD.Dxx
+xxEEExx
+xxF.Fxx
+xxHHHxx
+xxF.Fxx
+xxJJJxx
+xxF.Fxx
+xxLLLxx
+xxF.Fxx
+xxMMMxx
+xxF.Fxx
+xxNNNxx
+xxx@xxx
+ENDMAP
+
 
 ###################################################################
 #

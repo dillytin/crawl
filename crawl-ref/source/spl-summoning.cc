@@ -1041,6 +1041,72 @@ spret cast_summon_demon(int pow)
     return spret::success;
 }
 
+spret summon_butterflies()
+{
+    // Just fizzle instead of creating hostile butterflies.
+    if (you.allies_forbidden())
+    {
+        canned_msg(MSG_NOTHING_HAPPENS);
+        return spret::success;
+    }
+
+    const string reason = stop_summoning_reason(MR_NO_FLAGS, M_FLIES);
+    if (reason != "")
+    {
+        string prompt = make_stringf("Really summon butterflies while emitting a %s?",
+                                     reason.c_str());
+
+        if (!yesno(prompt.c_str(), false, 'n'))
+        {
+            canned_msg(MSG_OK);
+            return spret::abort;
+        }
+    }
+
+    // XXX: dedup with Xom, or change number?
+
+    // place some in a tight cluster, distance 2. Max 24 squares, so this is
+    // always at least 2/3 density.
+    const int how_many_inner = random_range(16, 22);
+    bool success = false;
+    for (int i = 0; i < how_many_inner; ++i)
+    {
+        mgen_data butterfly(MONS_BUTTERFLY, BEH_FRIENDLY, you.pos(), MHITYOU,
+                            MG_AUTOFOE);
+        butterfly.set_summoned(&you, 3, MON_SUMM_BUTTERFLIES);
+
+        if (create_monster(butterfly))
+            success = true;
+    }
+    // place another set more sparsely. These will try to find a placement
+    // within range 3 of the player. If that place is already filled, they will
+    // go as far as 2 from that original spot. This can backfill the inner
+    // zone.
+    const int how_many_outer = random_range(12, 28);
+    for (int i = 0; i < how_many_outer; ++i)
+    {
+        coord_def pos(-1,-1);
+        if (!find_habitable_spot_near(you.pos(), MONS_BUTTERFLY, 3, false, pos))
+            break;
+        mgen_data butterfly(MONS_BUTTERFLY, BEH_FRIENDLY, pos, MHITYOU,
+                            MG_AUTOFOE);
+        butterfly.set_summoned(&you, 3, MON_SUMM_BUTTERFLIES);
+
+        if (create_monster(butterfly))
+            success = true;
+    }
+
+
+    if (!success)
+        canned_msg(MSG_NOTHING_HAPPENS);
+    else if (silenced(you.pos()))
+        mpr("The fluttering of tiny wings stirs the air.");
+    else
+        mpr("You hear the tinkle of a tiny bell.");
+
+    return spret::success;
+}
+
 spret summon_shadow_creatures()
 {
     // Hard to predict what resistances might come from this.
@@ -1426,6 +1492,7 @@ static spell_type servitor_spells[] =
     SPELL_BOLT_OF_COLD, // left in for frederick
     SPELL_LIGHTNING_BOLT,
     SPELL_FIREBALL,
+    SPELL_ARCJOLT,
     SPELL_STONE_ARROW,
     SPELL_LRD,
     SPELL_AIRSTRIKE,

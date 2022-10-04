@@ -187,6 +187,7 @@
     Gittourarmy
     Ben Goetter
     Aaron Golden
+    Gompami
     Ed Gonzalez
     Gopall
     Goratrix
@@ -246,6 +247,8 @@
     Sami Liedes
     Dom 'Bodrick' Light
     Lightli
+    Lewis R. Liu
+    Lyre
     Kiëd Llaentenn
     Mark Lodato
     Matthew Ludivico
@@ -328,6 +331,7 @@
     Tobias Rehbein
     Remsleep
     Chris Rendle-Short
+    Reono
     Ryan Riegel
     riverfiend
     RjY
@@ -335,6 +339,7 @@
     Andy Roche
     rockygargoyle
     Will Rogers
+    RollingRubic
     Nate Rook
     David Rose
     runrin

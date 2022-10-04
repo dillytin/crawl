@@ -631,8 +631,8 @@ mon_holy_type holiness_by_name(string name)
     lowercase(name);
     for (const auto bit : mon_holy_type::range())
     {
-        if (name == holiness_name(mon_holy_type::exponent(bit)))
-            return mon_holy_type::exponent(bit);
+        if (name == holiness_name(bit))
+            return bit;
     }
     return MH_NONE;
 }
@@ -1672,15 +1672,17 @@ bool mons_class_can_leave_corpse(monster_type mc)
     return smc->leaves_corpse;
 }
 
-bool mons_class_can_be_zombified(monster_type mc)
+bool mons_class_can_be_zombified(monster_type mzc)
 {
-    monster_type ms = mons_species(mc);
-    return !invalid_monster_type(ms)
-            && !mons_class_flag(mc, M_NO_ZOMBIE)
-            && !mons_class_flag(mc, M_INSUBSTANTIAL)
-            && !mons_is_tentacle_or_tentacle_segment(mc)
-            && (mons_class_holiness(mc) & MH_NATURAL
-                || mons_class_can_leave_corpse(ms));
+    monster_type mc = mons_species(mzc);
+    ASSERT_smc();
+    return !invalid_monster_type(mc)
+            && !mons_class_flag(mzc, M_NO_ZOMBIE)
+            && !mons_class_flag(mzc, M_INSUBSTANTIAL)
+            && !mons_is_tentacle_or_tentacle_segment(mzc)
+            && (mons_class_holiness(mzc) & MH_NATURAL
+                || mons_class_can_leave_corpse(mc))
+            && smc->attack[0].damage; // i.e. has_attack
 }
 
 bool mons_can_be_zombified(const monster& mon)
@@ -2201,6 +2203,7 @@ bool flavour_has_reach(attack_flavour flavour)
         case AF_REACH:
         case AF_REACH_STING:
         case AF_REACH_TONGUE:
+        case AF_RIFT:
             return true;
         default:
             return false;
@@ -3343,7 +3346,7 @@ bool mons_is_confused(const monster& m, bool class_too)
 
 bool mons_is_wandering(const monster& m)
 {
-    return m.behaviour == BEH_WANDER;
+    return m.behaviour == BEH_WANDER || m.behaviour == BEH_BATTY;
 }
 
 bool mons_is_seeking(const monster& m)
@@ -3673,8 +3676,15 @@ bool mons_has_ranged_spell(const monster& mon, bool attack_only,
         return true;
 
     for (const mon_spell_slot &slot : mon.spells)
-        if (_ms_ranged_spell(slot.spell, attack_only, ench_too) && mons_spell_range(mon, slot.spell) > 1)
+    {
+        if (slot.spell == SPELL_CREATE_TENTACLES)
             return true;
+        if (_ms_ranged_spell(slot.spell, attack_only, ench_too)
+            && mons_spell_range(mon, slot.spell) > 1)
+        {
+            return true;
+        }
+    }
 
     return false;
 }
@@ -4723,7 +4733,7 @@ mon_threat_level_type mons_threat_level(const monster &mon, bool real)
 bool mons_foe_is_marked(const monster& mon)
 {
     if (mon.foe == MHITYOU)
-        return you.duration[DUR_SENTINEL_MARK];
+        return you.duration[DUR_SENTINEL_MARK] && in_bounds(you.pos());
     else
         return false;
 }

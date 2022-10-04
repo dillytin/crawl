@@ -530,6 +530,7 @@ TILE:     unrand_zealot_sword
 TILE_EQ:  zealot_sword
 # fallback places a randart eudemon blade!
 BRAND:    SPWPN_HOLY_WRATH
+FB_BRAND: SPWPN_HOLY_WRATH
 EV:       3
 ANGRY:    20
 LIFE:     1
@@ -570,8 +571,8 @@ TILE:    urand_eos
 TILE_EQ: eos
 BRAND:   SPWPN_ELECTROCUTION
 BOOL:    elec
-DESCRIP: It grants its wielder a halo, increasing accuracy against those within
- it.
+DESCRIP: It grants its wielder a halo, revealing invisible creatures and
+ increasing accuracy against all within it other than the wielder.
 
 # start TAG_MAJOR_VERSION == 34
 # Was "spear of Voo-Doo". In the African origin, there is a distinction
@@ -693,8 +694,8 @@ TILE:     urand_spriggans_knife
 TILE_EQ:  spriggans_knife
 EV:       4
 STEALTH:  1
-DESCRIP:  It is more effective when stabbing unaware enemies, treating them as
- though they were completely helpless.
+DESCRIP:  It is more effective when stabbing unaware enemies, sometimes treating
+ them as though they were completely helpless.
 
 NAME:    plutonium sword
 OBJ:     OBJ_WEAPONS/WPN_TRIPLE_SWORD
@@ -877,7 +878,7 @@ INSCRIP:  Detection Stab+
 PLUS:     +2
 COLOUR:   BROWN
 TILE:     urand_hood_assassin
-TILE_EQ:  hood_purple
+TILE_EQ:  hood_assassin
 STEALTH:  2
 VALUE:    600
 DESCRIP:  It allows the wearer to sense nearby creatures.
@@ -1020,7 +1021,7 @@ TILE_EQ: glove_white
 DEX:     3
 VALUE:   400
 DESCRIP: It allows the wearer to riposte with melee
- weapons, swiftly retaliating against missed or blocked attacks.
+ weapons, swiftly retaliating against missed or blocked melee attacks.
 
 NAME:     cloak of Starlight
 OBJ:      OBJ_ARMOUR/ARM_CLOAK
@@ -1199,6 +1200,7 @@ INSCRIP:  RegenMP++
 REGEN:    2
 COLOUR:   ETC_MUTAGENIC
 BOOL:     skip_ego, evil
+VALUE:    1000
 TILE:     urand_vitality
 
 NAME:     autumn katana
@@ -1657,6 +1659,7 @@ OBJ:      OBJ_WEAPONS/WPN_TRISHULA
 PLUS:     8
 COLOUR:   ETC_HOLY
 BRAND:    SPWPN_HOLY_WRATH
+FB_BRAND: SPWPN_HOLY_WRATH
 LIFE:     1
 BOOL:     fly, noises
 INSCRIP:  anguish,
@@ -1696,9 +1699,18 @@ PLUS:       +5
 BASE_ACC:   -1
 BASE_DAM:   +1
 BASE_DELAY: +1
+BOOL:       drain
 INSCRIP:    reach-cleave, poleaxe
 DBRAND:     It can be evoked to extend its reach, and strikes at all foes within reach, dealing less damage to those not targeted.
 +It uses either Axes or Polearms skill, whichever is higher.
+
+NAME:    Hermit's Pendant
+OBJ:     OBJ_JEWELLERY/AMU_FAITH
+COLOUR:  BROWN
+TILE:    urand_hermit_pendant
+MP:      +5
+INSCRIP: Invo=14 Evo=0
+DBRAND:  It sets your invocations skill to 14 and your evocations skill to 0.
 
 # This entry must always be last.
 ENUM:   DUMMY2

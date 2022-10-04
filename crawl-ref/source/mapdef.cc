@@ -1436,6 +1436,9 @@ map_corner_t map_lines::merge_subvault(const coord_def &mtl,
             (*overlay)(x, y).keyspec_idx = idx;
         }
 
+    dprf(DIAG_DNGN, "Merged subvault '%s' at %d,%d x %d,%d",
+        vmap.name.c_str(), vtl.x, vtl.y, vbr.x, vbr.y);
+
     return map_corner_t(vtl, vbr);
 }
 
@@ -5599,6 +5602,18 @@ void item_list::parse_random_by_class(string c, item_spec &spec)
     {
         spec.base_type = OBJ_WANDS;
         spec.sub_type = item_for_set(ITEM_SET_BEAM_WANDS);
+        return;
+    }
+    if (c == "blast wand")
+    {
+        spec.base_type = OBJ_WANDS;
+        spec.sub_type = item_for_set(ITEM_SET_BLAST_WANDS);
+        return;
+    }
+    if (c == "concealment scroll")
+    {
+        spec.base_type = OBJ_SCROLLS;
+        spec.sub_type = item_for_set(ITEM_SET_CONCEAL_SCROLLS);
         return;
     }
 

@@ -126,6 +126,7 @@ static ai_action::goodness _foe_sleep_viable(const monster &caster);
 static ai_action::goodness _foe_tele_goodness(const monster &caster);
 static ai_action::goodness _foe_mr_lower_goodness(const monster &caster);
 static ai_action::goodness _still_winds_goodness(const monster &caster);
+static ai_action::goodness _arcjolt_goodness(const monster &caster);
 static ai_action::goodness _foe_near_wall(const monster &caster);
 static ai_action::goodness _foe_not_nearby(const monster &caster);
 static ai_action::goodness _foe_near_lava(const monster &caster);
@@ -354,6 +355,12 @@ static const map<spell_type, mons_spell_logic> spell_to_logic = {
        _cast_marshlight,
     } },
     { SPELL_STILL_WINDS, { _still_winds_goodness, _cast_still_winds } },
+    { SPELL_ARCJOLT, { _arcjolt_goodness,
+        [](monster &caster, mon_spell_slot, bolt&) {
+            const int pow = mons_spellpower(caster, SPELL_ARCJOLT);
+            cast_arcjolt(pow, caster, false);
+        },
+    } },
     { SPELL_SMITING, { _always_worthwhile, _cast_smiting, } },
     { SPELL_CALL_DOWN_LIGHTNING, { _foe_not_nearby, _cast_call_down_lightning, _zap_setup(SPELL_CALL_DOWN_LIGHTNING) } },
     { SPELL_RESONANCE_STRIKE, { _always_worthwhile, _cast_resonance_strike, } },
@@ -492,7 +499,8 @@ static const map<spell_type, mons_spell_logic> spell_to_logic = {
         {
             const actor* foe = caster.get_foe();
             ASSERT(foe);
-            return ai_action::good_or_impossible(caster.can_constrict(foe, false));
+            return ai_action::good_or_impossible(caster.can_constrict(*foe,
+                                                                      CONSTRICT_ROOTS));
         }, _cast_grasping_roots, } },
     { SPELL_ABJURATION, {
         _mons_will_abjure,
@@ -814,17 +822,7 @@ static void _cast_grasping_roots(monster &caster, mon_spell_slot, bolt&)
                 mons_spellpower(caster, SPELL_GRASPING_ROOTS), 10), 2);
     dprf("Grasping roots turns: %d", turns);
     mpr("Roots burst forth from the earth!");
-    if (foe->is_player())
-    {
-        you.increase_duration(DUR_GRASPING_ROOTS, turns);
-        caster.start_constricting(you);
-        mprf(MSGCH_WARN, "The grasping roots grab you!");
-    }
-    else
-    {
-        foe->as_monster()->add_ench(mon_enchant(ENCH_GRASPING_ROOTS, 0, &caster,
-                    turns * BASELINE_DELAY));
-    }
+    grasp_with_roots(caster, *foe, turns);
 }
 
 /// Is the given full-LOS attack spell worth casting for the given monster?
@@ -1363,6 +1361,7 @@ bolt mons_spell_beam(const monster* mons, spell_type spell_cast, int power,
     case SPELL_DIG:
     case SPELL_CHARMING:
     case SPELL_BOLT_OF_LIGHT:
+    case SPELL_FASTROOT:
     case SPELL_QUICKSILVER_BOLT:
     case SPELL_PRIMAL_WAVE:
     case SPELL_BLINKBOLT:
@@ -1682,9 +1681,6 @@ bool setup_mons_cast(const monster* mons, bolt &pbolt, spell_type spell_cast,
     case SPELL_AWAKEN_FOREST:
     case SPELL_DRUIDS_CALL:
     case SPELL_SUMMON_HOLIES:
-#if TAG_MAJOR_VERSION == 34
-    case SPELL_CORPSE_ROT:
-#endif
     case SPELL_SUMMON_DRAGON:
     case SPELL_SUMMON_HYDRA:
     case SPELL_FIRE_SUMMON:
@@ -1716,6 +1712,7 @@ bool setup_mons_cast(const monster* mons, bolt &pbolt, spell_type spell_cast,
     case SPELL_SUMMON_EMPEROR_SCORPIONS:
     case SPELL_BATTLECRY:
     case SPELL_WARNING_CRY:
+    case SPELL_HUNTING_CALL:
     case SPELL_SEAL_DOORS:
     case SPELL_BERSERK_OTHER:
     case SPELL_SPELLFORGED_SERVITOR:
@@ -1786,9 +1783,6 @@ bool setup_mons_cast(const monster* mons, bolt &pbolt, spell_type spell_cast,
         pbolt.aux_source = pbolt.name;
     else
         pbolt.aux_source.clear();
-    // Dial down damage from wands, to spare early players.
-    if (evoke)
-        pbolt.damage.size = div_rand_round(pbolt.damage.size * 2, 3);
 
     return true;
 }
@@ -1898,9 +1892,11 @@ static bool _valid_aura_of_brilliance_ally(const monster* caster,
  * @param chief             The monster letting out the battlecry.
  * @param seen_affected     The affected monsters that are visible to the
  *                          player.
+ * @param spell_cast        The battlecry type spell which is being cast.
  */
 static void _print_battlecry_announcement(const monster& chief,
-                                          vector<monster*> &seen_affected)
+                                          vector<monster*> &seen_affected,
+                                          spell_type spell_cast)
 {
     // Disabling detailed frenzy announcement because it's so spammy.
     const msg_channel_type channel = chief.friendly() ? MSGCH_MONSTER_ENCHANT
@@ -1908,8 +1904,16 @@ static void _print_battlecry_announcement(const monster& chief,
 
     if (seen_affected.size() == 1)
     {
-        mprf(channel, "%s goes into a battle-frenzy!",
-             seen_affected[0]->name(DESC_THE).c_str());
+        if (spell_cast == SPELL_BATTLECRY)
+        {
+            mprf(channel, "%s goes into a battle-frenzy!",
+                seen_affected[0]->name(DESC_THE).c_str());
+        }
+        else if (spell_cast == SPELL_HUNTING_CALL)
+        {
+            mprf(channel, "%s picks up the pace!",
+                seen_affected[0]->name(DESC_THE).c_str());
+        }
         return;
     }
 
@@ -1926,19 +1930,30 @@ static void _print_battlecry_announcement(const monster& chief,
 
     const string ally_desc
         = pluralise_monster(mons_type_name(group_type, DESC_PLAIN));
-    mprf(channel, "%s %s go into a battle-frenzy!",
-         chief.friendly() ? "Your" : "The", ally_desc.c_str());
+
+    if (spell_cast == SPELL_BATTLECRY)
+    {
+        mprf(channel, "%s %s go into a battle-frenzy!",
+            chief.friendly() ? "Your" : "The", ally_desc.c_str());
+    }
+    else if (spell_cast == SPELL_HUNTING_CALL)
+    {
+        mprf(channel, "%s %s pick up the pace!",
+            chief.friendly() ? "Your" : "The", ally_desc.c_str());
+    }
 }
 
 /**
  * Let loose a mighty battlecry, inspiring & strengthening nearby foes!
  *
  * @param chief         The monster letting out the battlecry.
+ * @param spell_cast    The battlecry-type spell which is being cast.
  * @param check_only    Whether to perform a 'dry run', only checking whether
  *                      any monsters are potentially affected.
  * @return              Whether any monsters are (or would be) affected.
  */
-static bool _battle_cry(const monster& chief, bool check_only = false)
+static bool _battle_cry(const monster& chief, spell_type spell_cast,
+                        bool check_only = false)
 {
     const actor *foe = chief.get_foe();
 
@@ -1976,9 +1991,18 @@ static bool _battle_cry(const monster& chief, bool check_only = false)
             continue;
         }
 
-        // already buffed
-        if (mons->has_ench(ENCH_MIGHT))
-            continue;
+        if (spell_cast == SPELL_BATTLECRY)
+        {
+            // already buffed
+            if (mons->has_ench(ENCH_MIGHT))
+                continue;
+        }
+        else if (spell_cast == SPELL_HUNTING_CALL)
+        {
+            // already fast
+            if (mons->has_ench(ENCH_SWIFT) || mons->has_ench(ENCH_HASTE))
+                continue;
+        }
 
         // invalid battlecry target (wrong genus)
         if (mons_genus(mons->type) != mons_genus(chief.type))
@@ -1989,7 +2013,10 @@ static bool _battle_cry(const monster& chief, bool check_only = false)
 
         const int dur = random_range(12, 20) * speed_to_duration(mi->speed);
 
-        mi->add_ench(mon_enchant(ENCH_MIGHT, 1, &chief, dur));
+        if (spell_cast == SPELL_BATTLECRY)
+            mi->add_ench(mon_enchant(ENCH_MIGHT, 1, &chief, dur));
+        else if (spell_cast == SPELL_HUNTING_CALL)
+            mi->add_ench(mon_enchant(ENCH_SWIFT, 1, &chief, dur));
 
         affected++;
         if (you.can_see(**mi))
@@ -2006,7 +2033,7 @@ static bool _battle_cry(const monster& chief, bool check_only = false)
     noisy(LOS_DEFAULT_RANGE, chief.pos(), chief.mid);
 
     if (!seen_affected.empty())
-        _print_battlecry_announcement(chief, seen_affected);
+        _print_battlecry_announcement(chief, seen_affected, spell_cast);
 
     return true;
 }
@@ -2601,6 +2628,39 @@ static void _cast_pyroclastic_surge(monster &caster, mon_spell_slot, bolt &beam)
         update_screen();
         scaled_delay(25);
     }
+}
+
+/// Should the given monster cast Arcjolt?
+static ai_action::goodness _arcjolt_goodness(const monster &caster)
+{
+    const int pow = mons_spellpower(caster, SPELL_ARCJOLT);
+    vector<coord_def> targets = arcjolt_targets(caster, pow, false);
+
+    bolt tracer;
+    tracer.foe_ratio = 100; // safety first
+                            // XXX: rethink this if we put this on an enemy
+
+    for (coord_def t : targets)
+    {
+        actor* ai = actor_at(t);
+        if (!ai) continue;
+        if (mons_aligned(&caster, ai))
+        {
+            tracer.friend_info.count++;
+            tracer.friend_info.power +=
+                    ai->is_player() ? you.experience_level
+                                    : ai->as_monster()->get_experience_level();
+        }
+        else
+        {
+            tracer.foe_info.count++;
+            tracer.foe_info.power +=
+                    ai->is_player() ? you.experience_level
+                                    : ai->as_monster()->get_experience_level();
+        }
+    }
+
+    return mons_should_fire(tracer) ? ai_action::good() : ai_action::bad();
 }
 
 /// Should the given monster cast Still Winds?
@@ -4151,8 +4211,6 @@ bool handle_mon_spell(monster* mons)
     if (!(flags & MON_SPELL_INSTANT))
     {
         mons->lose_energy(EUT_SPELL);
-        if (spell_cast == SPELL_SANDBLAST)
-            mons->lose_energy(EUT_SPELL); // double slow!
         return true;
     }
 
@@ -5206,7 +5264,7 @@ dice_def resonance_strike_base_damage(const monster &mons)
 
 static const int MIN_DREAM_SUCCESS_POWER = 25;
 
-static void _sheep_message(int num_sheep, int sleep_pow, actor& foe)
+static void _sheep_message(int num_sheep, int sleep_pow, bool seen, actor& foe)
 {
     string message;
 
@@ -5228,44 +5286,73 @@ static void _sheep_message(int num_sheep, int sleep_pow, actor& foe)
                                num_sheep == 1 ? "s its" : " their");
     }
 
-    // Messaging for non-player targets
-    if (!foe.is_player() && you.see_cell(foe.pos()))
+    if (foe.is_player())
     {
-        const char* pluralize = num_sheep == 1 ? "s": "";
-        const string foe_name = foe.name(DESC_THE);
-        if (sleep_pow)
+        const char* drowsy = sleep_pow ? " You feel drowsy..." : "";
+        if (!seen)
         {
-            mprf(foe.as_monster()->friendly() ? MSGCH_FRIEND_SPELL
-                                              : MSGCH_MONSTER_SPELL,
-                 "As the sheep sparkle%s and sway%s, %s falls asleep.",
-                 pluralize,
-                 pluralize,
-                 foe_name.c_str());
+            mprf(MSGCH_MONSTER_SPELL,
+                 "Motes of dream dust float from an unseen source.%s",
+                 drowsy);
+            return;
         }
-        else // if dust strength failure for non-player
+        mprf(MSGCH_MONSTER_SPELL, "%s%s", message.c_str(), drowsy);
+        return;
+    }
+
+    if (!you.see_cell(foe.pos()))
+        return;
+
+    const string foe_name = foe.name(DESC_THE);
+    const auto chan = foe.as_monster()->friendly() ? MSGCH_MONSTER_SPELL
+                                                   : MSGCH_FRIEND_SPELL;
+    if (!seen)
+    {
+        if (!sleep_pow)
         {
-            mprf(foe.as_monster()->friendly() ? MSGCH_FRIEND_SPELL
-                                              : MSGCH_MONSTER_SPELL,
-                 "The dream sheep attempt%s to lull %s to sleep.",
-                 pluralize,
-                 foe_name.c_str());
+            mprf(chan, "Motes of dream dust float from an unseen source.");
             mprf("%s is unaffected.", foe_name.c_str());
+            return;
         }
+
+        mprf(chan,
+             "As motes of dream dust float from an unseen source, %s falls asleep.",
+             foe_name.c_str());
+        return;
     }
-    else if (foe.is_player())
+
+    const char* pluralize = num_sheep == 1 ? "s": "";
+    if (sleep_pow)
     {
-        mprf(MSGCH_MONSTER_SPELL, "%s%s", message.c_str(),
-             sleep_pow ? " You feel drowsy..." : "");
+        mprf(chan,
+             "As the sheep sparkle%s and sway%s, %s falls asleep.",
+             pluralize,
+             pluralize,
+             foe_name.c_str());
+        return;
     }
+
+    mprf(chan,
+         "The dream sheep attempt%s to lull %s to sleep.",
+         pluralize,
+         foe_name.c_str());
+    mprf("%s is unaffected.", foe_name.c_str());
 }
 
 static void _dream_sheep_sleep(monster& mons, actor& foe)
 {
     // Shepherd the dream sheep.
     int num_sheep = 0;
+    bool seen = false;
     for (monster_near_iterator mi(foe.pos(), LOS_NO_TRANS); mi; ++mi)
+    {
         if (mi->type == MONS_DREAM_SHEEP)
+        {
             num_sheep++;
+            if (!seen && you.can_see(**mi))
+                seen = true;
+        }
+    }
 
     // The correlation between amount of sheep and duration of
     // sleep is randomised, but bounds are 5 to 20 turns of sleep.
@@ -5277,7 +5364,7 @@ static void _dream_sheep_sleep(monster& mons, actor& foe)
         sleep_pow = 0;
 
     // Communicate with the player.
-    _sheep_message(num_sheep, sleep_pow, foe);
+    _sheep_message(num_sheep, sleep_pow, seen, foe);
 
     // Put the player to sleep.
     if (sleep_pow)
@@ -5556,11 +5643,8 @@ void mons_cast(monster* mons, bolt pbolt, spell_type spell_cast,
             if (!monster_at(*ai) && !cell_is_solid(*ai))
                 empty_space++;
 
-        empty_space = max(3, empty_space);
-
-        int damage_taken = 5 + empty_space
-                         + random2avg(2 + div_rand_round(splpow, 7),
-                                      empty_space);
+        int damage_taken = empty_space * 2
+                         + random2avg(2 + div_rand_round(splpow, 7), 2);
         damage_taken = foe->beam_resists(pbolt, damage_taken, false);
 
         damage_taken = foe->apply_ac(damage_taken);
@@ -6313,11 +6397,15 @@ void mons_cast(monster* mons, bolt pbolt, spell_type spell_cast,
     }
 
     case SPELL_BATTLECRY:
-        _battle_cry(*mons);
+        _battle_cry(*mons, SPELL_BATTLECRY);
         return;
 
     case SPELL_WARNING_CRY:
         return; // the entire point is the noise, handled elsewhere
+
+    case SPELL_HUNTING_CALL:
+        _battle_cry(*mons, SPELL_HUNTING_CALL);
+        return;
 
     case SPELL_SEAL_DOORS:
         _seal_doors_and_stairs(mons);
@@ -7561,15 +7649,21 @@ ai_action::goodness monster_spell_goodness(monster* mon, spell_type spell)
 
     case SPELL_THROW_BARBS:
     case SPELL_HARPOON_SHOT:
-        // Don't fire barbs in melee range.
+        // Don't fire if we can hit.
         ASSERT(foe);
-        return ai_action::good_or_bad(!adjacent(mon->pos(), foe->pos()));
+        return ai_action::good_or_bad(grid_distance(mon->pos(), foe->pos())
+                                      > mon->reach_range());
 
     case SPELL_BATTLECRY:
-        return ai_action::good_or_bad(_battle_cry(*mon, true));
+        return ai_action::good_or_bad(_battle_cry(*mon, SPELL_BATTLECRY,
+                                      true));
 
     case SPELL_WARNING_CRY:
         return ai_action::good_or_bad(!friendly);
+
+    case SPELL_HUNTING_CALL:
+        return ai_action::good_or_bad(_battle_cry(*mon, SPELL_HUNTING_CALL,
+                                      true));
 
     case SPELL_CONJURE_BALL_LIGHTNING:
         if (!!(mon->holiness() & MH_DEMONIC))

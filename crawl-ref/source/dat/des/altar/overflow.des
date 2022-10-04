@@ -154,7 +154,7 @@ function species_mock(e)
     return "tentacled monstrosity"
   elseif you.race() == "Ogre" then
     return "ettin skeleton"
-  elseif you.race() == "Palentonga" then
+  elseif you.race() == "Armataur" then
     return "rat"
   elseif you.race() == "Spriggan" then
     return "unseen horror"
@@ -2018,6 +2018,25 @@ MAP
 ......www.G.v
  .....w1w...v
       vvvvvvv
+ENDMAP
+
+NAME:   hellmonk_okawaru_the_only_friend_you_need
+TAGS:   temple_overflow_1 temple_overflow_okawaru uniq_altar_okawaru
+TAGS:   transparent decor
+WEIGHT: 5
+KFEAT:  _ = altar_okawaru
+KITEM:  ' = any weapon plus:0 ego:spectral ident:all
+: interest_check(_G)
+MAP
+vvvv vvvv
+v..vvv..v
+v.......v
+vvv...vvv
+  v._.v
+vvv.'.vvv
+v.......v
+v..v+v..v
+vvvv@vvvv
 ENDMAP
 
 ### Qazlal overflow altars ####################################################
@@ -4066,7 +4085,7 @@ TAGS:    no_item_gen transparent
 KFEAT:   A = altar_kikubaaqudgha
 KFEAT:   B = altar_sif_muna
 KFEAT:   C = altar_vehumet
-ITEM:    randbook owner:Kikubaaqudgha disc:necromancy spells:necrotize \
+ITEM:    randbook owner:Kikubaaqudgha disc:necromancy spells:necrotise \
          numspells:1
 # You already got a direct damage spell by looting the other gods' altars.
 ITEM:    randbook owner:Sif_Muna disc:transmutation numspells:1 slevels:1 / \
@@ -5200,6 +5219,21 @@ c.w.....wwwww.c.
 c.wwwwww......c.
 c.......ccccccc.
 cccccccc........
+ENDMAP
+
+NAME:    nicolae_overflow_two_pavilions
+TAGS:    temple_overflow_generic_2 no_pool_fixup transparent
+SHUFFLE: DEFH
+SUBST:   DE : wl, FH : wl
+KPROP:   l = no_cloud_gen
+MAP
+DDDDDDD@FFFFFFF
+DcccccD.FcccccF
+DcEEEcD.FcHHHcF
+DcEB.......BHcF
+DcEEEcD.FcHHHcF
+DcccccD.FcccccF
+DDDDDDD@FFFFFFF
 ENDMAP
 
 NAME: minmay_overflow_temple_star_quad

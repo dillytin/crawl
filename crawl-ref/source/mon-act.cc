@@ -564,7 +564,7 @@ static void _handle_battiness(monster &mons)
 {
     if (!mons_is_batty(mons))
         return;
-    mons.behaviour = BEH_WANDER;
+    mons.behaviour = BEH_BATTY;
     set_random_target(&mons);
     mons.props[BATTY_TURNS_KEY] = 0;
 }
@@ -2127,15 +2127,12 @@ static void _torpor_snail_slow(monster* mons)
     // XXX: might be nice to refactor together with _ancient_zyme_sicken().
     // XXX: also with torpor_slowed().... so many duplicated checks :(
 
-    if (is_sanctuary(mons->pos())
-        || mons->attitude != ATT_HOSTILE
-        || mons->has_ench(ENCH_CHARM))
-    {
+    if (is_sanctuary(mons->pos()))
         return;
-    }
 
     if (!is_sanctuary(you.pos())
         && !you.stasis()
+        && !mons->wont_attack()
         && cell_see_cell(you.pos(), mons->pos(), LOS_SOLID_SEE))
     {
         if (!you.duration[DUR_SLOW])
@@ -2228,7 +2225,7 @@ static void _post_monster_move(monster* mons)
         // TODO: implement monster spectral ego
     }
 
-    if (mons->foe != MHITNOT && mons_is_wandering(*mons) && mons_is_batty(*mons))
+    if (mons->foe != MHITNOT && mons->behaviour == BEH_BATTY)
     {
         int &bat_turns = mons->props[BATTY_TURNS_KEY].get_int();
         bat_turns++;

@@ -218,12 +218,12 @@ static const mon_spellbook mspell_list[] =
     },
 
     // ('g') Small humanoids.
-    {  MST_GNOLL_SHAMAN,
+    {  MST_BOUDA,
       {
-       { SPELL_CORONA, 11, MON_SPELL_PRIEST },
-       { SPELL_HEAL_OTHER, 21, MON_SPELL_PRIEST },
-       { SPELL_HASTE_OTHER, 11, MON_SPELL_PRIEST },
-       { SPELL_MINOR_HEALING, 11, MON_SPELL_PRIEST | MON_SPELL_EMERGENCY },
+       { SPELL_HEAL_OTHER, 20, MON_SPELL_PRIEST },
+       { SPELL_MINOR_HEALING, 20, MON_SPELL_PRIEST | MON_SPELL_EMERGENCY },
+       { SPELL_WEAKENING_GAZE, 20, MON_SPELL_PRIEST | MON_SPELL_INSTANT },
+       { SPELL_HUNTING_CALL, 50, MON_SPELL_VOCAL },
       }
     },
 
@@ -1133,6 +1133,12 @@ static const mon_spellbook mspell_list[] =
       }
     },
 
+    { MST_STARFLOWER,
+      {
+       { SPELL_HARPOON_SHOT, 80, MON_SPELL_NATURAL },
+      }
+    },
+
     // ('Q') Tengu.
     {  MST_TENGU_CONJURER,
       {
@@ -1605,7 +1611,7 @@ static const mon_spellbook mspell_list[] =
     // (';') Walking Tomes.
     { MST_WALKING_TOME,
       {
-       { SPELL_CONJURE_LIVING_SPELLS, 60, MON_SPELL_MAGICAL },
+       { SPELL_CONJURE_LIVING_SPELLS, 60, MON_SPELL_WIZARD },
       }
     },
 

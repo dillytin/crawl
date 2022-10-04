@@ -125,6 +125,7 @@ static map<enchant_type, monster_info_flags> trivial_ench_mb_mappings = {
     { ENCH_ANTIMAGIC,       MB_ANTIMAGIC },
     { ENCH_ANGUISH,         MB_ANGUISH },
     { ENCH_SIMULACRUM,      MB_SIMULACRUM },
+    { ENCH_TP,              MB_TELEPORTING },
 };
 
 static monster_info_flags ench_to_mb(const monster& mons, enchant_type ench)
@@ -639,7 +640,7 @@ monster_info::monster_info(const monster* m, int milev)
         // Applies to both friendlies and hostiles
         if (mons_is_fleeing(*m))
             mb.set(MB_FLEEING);
-        else if (mons_is_wandering(*m) && !mons_is_batty(*m))
+        else if (m->behaviour == BEH_WANDER)
         {
             if (m->is_stationary())
                 mb.set(MB_UNAWARE);
@@ -647,7 +648,7 @@ monster_info::monster_info(const monster* m, int milev)
                 mb.set(MB_WANDERING);
         }
         else if (m->foe == MHITNOT
-                 && !mons_is_batty(*m)
+                 && m->behaviour != BEH_BATTY
                  && m->attitude == ATT_HOSTILE)
         {
             mb.set(MB_UNAWARE);
@@ -696,6 +697,9 @@ monster_info::monster_info(const monster* m, int milev)
 
     if (m->is_silenced() && m->has_spells() && m->immune_to_silence())
         mb.set(MB_SILENCE_IMMUNE);
+
+    if (m->reflection()) // technically might leak info, but probably fine
+        mb.set(MB_REFLECTING);
 
     if (mons_is_pghost(type))
     {
@@ -780,11 +784,12 @@ monster_info::monster_info(const monster* m, int milev)
     constricting_name.clear();
 
     // Name of what this monster is directly constricted by, if any
-    if (m->is_directly_constricted())
+    const auto constr_typ = m->get_constrict_type();
+    if (constr_typ == CONSTRICT_MELEE)
     {
         const actor * const constrictor = actor_by_mid(m->constricted_by);
         ASSERT(constrictor);
-        constrictor_name = (constrictor->constriction_does_damage(true) ?
+        constrictor_name = (constrictor->constriction_does_damage(constr_typ) ?
                             "constricted by " : "held by ")
                            + constrictor->name(_article_for(constrictor),
                                                true);
@@ -794,12 +799,12 @@ monster_info::monster_info(const monster* m, int milev)
     if (m->constricting)
     {
         const char *participle =
-            m->constriction_does_damage(true) ? "constricting " : "holding ";
+            m->constriction_does_damage(CONSTRICT_MELEE) ? "constricting " : "holding ";
         for (const auto &entry : *m->constricting)
         {
             const actor* const constrictee = actor_by_mid(entry.first);
 
-            if (constrictee && constrictee->is_directly_constricted())
+            if (constrictee && constrictee->get_constrict_type() == CONSTRICT_MELEE)
             {
                 constricting_name.push_back(participle
                                             + constrictee->name(
@@ -1605,8 +1610,10 @@ reach_type monster_info::reach_range(bool items) const
     for (int i = 0; i < MAX_NUM_ATTACKS; ++i)
     {
         const attack_flavour fl = e->attack[i].flavour;
-        if (flavour_has_reach(fl))
-            range = REACH_TWO;
+        if (fl == AF_RIFT)
+            range = REACH_THREE;
+        else if (flavour_has_reach(fl))
+            range = max(REACH_TWO, range);
     }
 
     if (items)

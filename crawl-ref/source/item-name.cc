@@ -636,6 +636,7 @@ static const char* _wand_type_name(int wandtype)
     case WAND_MINDBURST:       return "mindburst";
     case WAND_LIGHT:           return "light";
     case WAND_QUICKSILVER:     return "quicksilver";
+    case WAND_ROOTS:           return "roots";
     default:                   return item_type_removed(OBJ_WANDS, wandtype)
                                     ? "removedness"
                                     : "bugginess";
@@ -706,6 +707,7 @@ static const char* scroll_type_name(int scrolltype)
     case SCR_TORMENT:            return "torment";
     case SCR_IMMOLATION:         return "immolation";
     case SCR_POISON:             return "poison";
+    case SCR_BUTTERFLIES:        return "butterflies";
     case SCR_BLINKING:           return "blinking";
     case SCR_MAGIC_MAPPING:      return "magic mapping";
     case SCR_FOG:                return "fog";
@@ -1172,6 +1174,8 @@ string sub_type_string(const item_def &item, bool known)
             return "Everburning Encyclopedia";
         case BOOK_OZOCUBU:
             return "Ozocubu's Autobiography";
+        case BOOK_MAXWELL:
+            return "Maxwell's Memoranda";
         case BOOK_YOUNG_POISONERS:
             return "Young Poisoner's Handbook";
         case BOOK_FEN:
@@ -1986,7 +1990,9 @@ void check_if_everything_is_identified()
 
         for (const auto s : all_item_subtypes(t))
         {
-            if (!item_type_known(t, s) && unidentified++)
+            if (!item_type_known(t, s)
+                && !item_known_excluded_from_set(t, s)
+                && unidentified++)
             {
                 you.props.erase(IDENTIFIED_ALL_KEY);
                 return;
@@ -2037,6 +2043,7 @@ bool set_ident_type(object_class_type basetype, int subtype, bool identify,
         return false;
 
     you.type_ids[basetype][subtype] = identify;
+    maybe_mark_set_known(basetype, subtype);
     request_autoinscribe();
 
     // Our item knowledge changed in a way that could possibly affect shop
@@ -2736,7 +2743,8 @@ bool is_dangerous_item(const item_def &item, bool temp)
         case SCR_VULNERABILITY:
             return true;
         case SCR_POISON:
-            return !player_res_poison(false, temp, true);
+            return player_res_poison(false, temp, true) <= 0
+                   && !you.cloud_immune();
         case SCR_TORMENT:
             return !you.res_torment();
         default:
@@ -2922,6 +2930,7 @@ bool is_useless_item(const item_def &item, bool temp, bool ident)
         case SCR_BRAND_WEAPON:
             return you.has_mutation(MUT_NO_GRASPING);
         case SCR_SUMMONING:
+        case SCR_BUTTERFLIES:
             return you.allies_forbidden();
         case SCR_FOG:
         case SCR_POISON:
@@ -3006,6 +3015,7 @@ bool is_useless_item(const item_def &item, bool temp, bool ident)
 
         case AMU_FAITH:
             return (you.has_mutation(MUT_FORLORN) && !you.religion) // ??
+                    || you.has_mutation(MUT_FAITH)
                     || !ignore_faith_reason().empty();
 
         case AMU_GUARDIAN_SPIRIT:
@@ -3022,13 +3032,6 @@ bool is_useless_item(const item_def &item, bool temp, bool ident)
                        && regeneration_is_inhibited());
 
         case AMU_MANA_REGENERATION:
-#if TAG_MAJOR_VERSION == 34
-            if (have_passive(passive_t::no_mp_regen)
-                || player_under_penance(GOD_PAKELLAS))
-            {
-                return true;
-            }
-#endif
             return !you.max_magic_points;
 
         case RING_MAGICAL_POWER:
@@ -3189,6 +3192,8 @@ string item_prefix(const item_def &item, bool temp)
 
     case OBJ_ARMOUR:
     case OBJ_JEWELLERY:
+        if (is_unrandom_artefact(item))
+            prefixes.push_back("unrand");
         if (is_artefact(item))
             prefixes.push_back("artefact");
         // fall through

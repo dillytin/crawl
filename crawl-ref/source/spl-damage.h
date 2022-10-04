@@ -13,6 +13,10 @@ struct dice_def;
 class dist;
 
 const int DEFAULT_SHATTER_DICE = 3;
+const int FLAT_DISCHARGE_ARC_DAMAGE = 2;
+const int AIRSTRIKE_PER_SPACE_BONUS = 2;
+const int MAX_AIRSTRIKE_BONUS = 8 * AIRSTRIKE_PER_SPACE_BONUS;
+
 #define COUPLING_TIME_KEY "maxwells_charge_time"
 #define FLAME_WAVE_KEY "flame_waves"
 #define FLAME_WAVE_POWER_KEY "flame_wave_power"
@@ -39,6 +43,9 @@ spret cast_freeze(int pow, monster* mons, bool fail);
 dice_def freeze_damage(int pow);
 spret cast_airstrike(int pow, coord_def target, bool fail);
 int airstrike_space_around(coord_def target, bool count_invis);
+dice_def base_airstrike_damage(int pow, bool random = false);
+string describe_airstrike_dam(dice_def dice);
+spret cast_momentum_strike(int pow, coord_def target, bool fail);
 spret cast_shatter(int pow, bool fail);
 dice_def shatter_damage(int pow, monster *mons = nullptr);
 int terrain_shatter_chance(coord_def where, const actor &agent);
@@ -54,6 +61,10 @@ spret cast_poisonous_vapours(int pow, const dist &beam, bool fail, bool test=fal
 bool safe_discharge(coord_def where, vector<const actor *> &exclude);
 spret cast_discharge(int pow, const actor &agent, bool fail = false,
                           bool prompt = true);
+int discharge_max_damage(int pow);
+spret cast_arcjolt(int pow, const actor &agent, bool fail);
+dice_def arcjolt_damage(int pow);
+vector<coord_def> arcjolt_targets(const actor &agent, int pow, bool actual);
 dice_def base_fragmentation_damage(int pow);
 bool setup_fragmentation_beam(bolt &beam, int pow, const actor *caster,
                               const coord_def target, bool quiet,
@@ -125,4 +136,4 @@ void end_maxwells_coupling(bool quiet = false);
 spret cast_noxious_bog(int pow, bool fail);
 vector<coord_def> find_bog_locations(const coord_def &center, int pow);
 
-vector<coord_def> find_near_hostiles(int range);
+vector<coord_def> find_near_hostiles(int range, bool affect_invis);

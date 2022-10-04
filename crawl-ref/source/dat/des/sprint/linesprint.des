@@ -32,7 +32,7 @@ function general_item_setup(e)
           potion of berserk rage ident:all /\
           potion of mutation ident:all")
   e.kitem("? = scroll of blinking ident:all /\
-          scroll of identify ident:all / scroll of fog ident:all /\
+          scroll of identify ident:all / any concealment scroll ident:all /\
           scroll of fear ident:all / scroll of enchant weapon ident:all q:2 /\
           scroll of enchant armour ident:all q:2")
 end
@@ -218,7 +218,7 @@ KITEM:    a = potion of curing q:4 ident:all, \
               potion of magic q:2 ident:all
 KITEM:    b = scroll of blinking q:1 ident:all, \
               scroll of amnesia q:2 ident:all
-KITEM:    d = wand of iceblast charges:10 ident:all /\
+KITEM:    d = any blast wand charges:10 ident:all /\
               any beam wand charges:10 ident:all, \
 KITEM:    e = rapier plus:2 ego:electrocution ident:all /\
            rapier plus:2 ego:draining ident:all /\
@@ -325,7 +325,7 @@ SHUFFLE:  123456
 : line_setup(_G)
 : general_item_setup(_G)
 : lua_marker('~', props_marker {
-:           door_description_suffix=" to Lair:6",
+:           door_description_suffix=" to Lair:5",
 :           })
 MAP
 xxxxxxxxxxxxx

@@ -1157,7 +1157,7 @@ static bool _merfolk_avatar_movement_effect(const monster* mons)
         || you.duration[DUR_TIME_STEP]
         || you.cannot_act()
         || you.clarity()
-        || you.is_stationary()
+        || !you.is_motile()
         || you.resists_dislodge("being lured by song"))
     {
         return true;
@@ -1411,7 +1411,7 @@ void monster::apply_enchantment(const mon_enchant &me)
     case ENCH_GRASPING_ROOTS:
     case ENCH_WATERLOGGED:
     case ENCH_SIMULACRUM:
-    case ENCH_NECROTIZE:
+    case ENCH_NECROTISE:
     case ENCH_CONCENTRATE_VENOM:
         decay_enchantment(en);
         break;
@@ -1525,8 +1525,7 @@ void monster::apply_enchantment(const mon_enchant &me)
             del_ench(ENCH_STICKY_FLAME);
             break;
         }
-        const int dam = resist_adjust_damage(this, BEAM_FIRE,
-                                             roll_dice(2, 4) - 1);
+        const int dam = resist_adjust_damage(this, BEAM_FIRE, roll_dice(2, 4));
 
         if (dam > 0)
         {
@@ -2360,7 +2359,7 @@ int mon_enchant::calc_duration(const monster* mons,
     case ENCH_EMPOWERED_SPELLS:
         cturn = 20 * 10 / _mod_speed(10, mons->speed);
         break;
-    case ENCH_NECROTIZE:
+    case ENCH_NECROTISE:
         return 10;
     case ENCH_RING_OF_THUNDER:
     case ENCH_RING_OF_FLAMES:

@@ -816,43 +816,11 @@ static bool _is_damage_threatening (int damage_fraction_of_hp, int mut_level)
 {
     const int hp_fraction = you.hp * 100 / you.hp_max;
     const int safe_damage_fraction = mut_level == 1 ? 12 : 5;
-    const int scary_damage_fraction = mut_level == 1 ? 50 : 5;
+    const int scary_damage_fraction = mut_level == 1 ? 50 : 20;
     return damage_fraction_of_hp > safe_damage_fraction
             && hp_fraction <= 100 - scary_damage_fraction + safe_damage_fraction
             && (damage_fraction_of_hp + random2(scary_damage_fraction) >= scary_damage_fraction
                 || random2(100) > hp_fraction);
-}
-
-// Palentongas curl up after the first time they've been hit in a round.
-static void _consider_curling(kill_method_type death_type)
-{
-    if (!you.has_mutation(MUT_CURL)
-        || you.props[PALENTONGA_CURL_KEY].get_bool())
-    {
-        return;
-    }
-
-    switch (death_type)
-    {
-        case KILLED_BY_MONSTER:
-        case KILLED_BY_BEAM:
-        case KILLED_BY_DEATH_EXPLOSION:
-        case KILLED_BY_TRAP:
-        case KILLED_BY_BOUNCE:
-        case KILLED_BY_REFLECTION:
-        case KILLED_BY_DISINT:
-        case KILLED_BY_HEADBUTT:
-        case KILLED_BY_ROLLING:
-        case KILLED_BY_BEING_THROWN:
-        case KILLED_BY_COLLISION:
-            break;
-        default:
-            // stuff like poison, smiting, etc
-            return;
-    }
-
-    you.props[PALENTONGA_CURL_KEY] = true;
-    you.redraw_armour_class = true;
 }
 
 /** Hurt the player. Isn't it fun?
@@ -908,8 +876,6 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
     // Don't wake the player with fatal or poison damage.
     if (dam > 0 && dam < you.hp && death_type != KILLED_BY_POISON)
         you.check_awaken(500);
-
-    _consider_curling(death_type);
 
     const bool non_death = death_type == KILLED_BY_QUITTING
                         || death_type == KILLED_BY_WINNING

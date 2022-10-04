@@ -55,6 +55,7 @@
 #include "mon-tentacle.h"
 #include "mon-transit.h"
 #include "religion.h"
+#include "spl-clouds.h" // explode_blastsparks_at
 #include "spl-monench.h"
 #include "spl-summoning.h"
 #include "spl-util.h"
@@ -2722,7 +2723,7 @@ void monster::banish(const actor *agent, const string &, const int, bool force)
     if (mons_is_projectile(type))
         return;
 
-    if (player_in_branch(BRANCH_ARENA))
+    if (!force && player_in_branch(BRANCH_ARENA))
     {
         string msg = make_stringf(" prevents %s banishment from the Arena!",
                                   name(DESC_ITS).c_str());
@@ -2831,10 +2832,11 @@ bool monster::has_damage_type(int dam_type)
     return false;
 }
 
-int monster::constriction_damage(bool direct) const
+int monster::constriction_damage(constrict_type typ) const
 {
-    if (direct)
+    switch (typ)
     {
+    case CONSTRICT_MELEE:
         for (int i = 0; i < MAX_NUM_ATTACKS; ++i)
         {
             const mon_attack_def attack = mons_attack_spec(*this, i);
@@ -2842,16 +2844,12 @@ int monster::constriction_damage(bool direct) const
                 return attack.damage;
         }
         return -1;
+    case CONSTRICT_ROOTS:
+        return roll_dice(2, div_rand_round(40 +
+                    mons_spellpower(*this, SPELL_GRASPING_ROOTS), 20));
+    default:
+        return 0;
     }
-
-    // The only monster spell that's a source of indirect constriction.
-    return roll_dice(2, div_rand_round(40 +
-                mons_spellpower(*this, SPELL_GRASPING_ROOTS), 20));
-}
-
-bool monster::constriction_does_damage(bool direct) const
-{
-    return constriction_damage(direct) > 0;
 }
 
 /** Return true if the monster temporarily confused. False for butterflies, or
@@ -5251,6 +5249,10 @@ void monster::apply_location_effects(const coord_def &oldpos,
             del_ench(ENCH_AQUATIC_LAND);
     }
 
+    cloud_struct* cloud = cloud_at(pos());
+    if (cloud && cloud->type == CLOUD_BLASTSPARKS)
+        explode_blastsparks_at(pos()); // schedules a fineff, so won't kill
+
     // Monsters stepping on traps:
     trap_def* ptrap = trap_at(pos());
     if (ptrap)
@@ -5689,7 +5691,7 @@ void monster::react_to_damage(const actor *oppressor, int damage,
     // XXX: this might not be necessary anymore?
     if (type == MONS_SHOCK_SERPENT && damage > 4 && oppressor && oppressor != this)
     {
-        const int pow = div_rand_round(min(damage, hit_points + damage), 9);
+        const int pow = div_rand_round(min(damage, hit_points + damage), 12);
         if (pow)
         {
             // we intentionally allow harming the oppressor in this case,
@@ -5885,7 +5887,12 @@ reach_type monster::reach_range() const
     {
         const mon_attack_def attk(mons_attack_spec(*this, i));
         if (flavour_has_reach(attk.flavour) && attk.damage)
-            range = REACH_TWO;
+        {
+            if (attk.flavour == AF_RIFT)
+                range = REACH_THREE;
+            else
+                range = max(REACH_TWO, range);
+        }
     }
 
     const item_def *wpn = primary_weapon();

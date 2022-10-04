@@ -76,7 +76,6 @@ static unsigned _get_travel_colour(const coord_def& p)
 }
 #endif
 
-#ifndef USE_TILE_LOCAL
 bool travel_colour_override(const coord_def& p)
 {
     if (is_waypoint(p) || is_stair_exclusion(p)
@@ -108,6 +107,7 @@ bool travel_colour_override(const coord_def& p)
         return false;
 }
 
+#ifndef USE_TILE_LOCAL
 static char32_t _get_sightmap_char(dungeon_feature_type feat)
 {
     return get_feature_def(feat).symbol();
@@ -665,11 +665,11 @@ static map_view_state _init_view_state(const map_control_state& state)
 class UIMapView : public ui::Widget
 {
 public:
-    UIMapView(level_pos& lpos, levelview_excursion& le, bool travel_mode,
+    UIMapView(level_pos& lp, levelview_excursion& le, bool travel_mode,
               bool allow_offlevel)
         : m_reentry(false)
     {
-        m_state.lpos = lpos;
+        m_state.lpos = lp;
         m_state.features = &m_features;
         m_state.feats = &m_feats;
         m_state.excursion = &le;

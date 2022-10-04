@@ -140,6 +140,7 @@ enum attack_flavour
     AF_SEAR,
     AF_BARBS,
     AF_SPIDER,
+    AF_RIFT,
 };
 
 // Non-spell "summoning" types to give to monster::mark_summoned(), or
@@ -160,6 +161,7 @@ enum mon_summon_type
     MON_SUMM_SHADOW,  // Shadow trap
     MON_SUMM_LANTERN, // Lantern of shadows
 #endif
+    MON_SUMM_BUTTERFLIES, // Scroll of butterflies
 };
 
 #include "mon-flags.h"

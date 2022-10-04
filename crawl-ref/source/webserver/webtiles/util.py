@@ -18,6 +18,122 @@ try:
 except ImportError:
     pass
 
+# utility code for explicit debugging of potentially blocking I/O. We use this
+# because while asyncio debugging is good at detecting when a blocking call
+# happens, it is terrible at identifying what tornado 6+ is actually doing at
+# the time.
+
+# backwards compatibility for python 2.7, remove this some day. Disables the
+# manual blocking diagnostic code if we are this old.
+_asyncio_available = True
+try:
+    def f():
+        pass
+    f.__qualname__ # for good measure..
+    from asyncio.base_events import _format_handle
+    import asyncio.events
+except:
+    _asyncio_available = False
+
+# note: this is somewhat wacky because the slow callback logging code will
+# always run *after* this context manager has exited, but we do sometimes want
+# to nest them. TODO: could timing be done directly in this?
+blocking_description = []
+last_blocking_description = "None"
+class BlockingDescriptionCtx(object):
+    def __init__(self):
+        self.desc = "None"
+
+    def __enter__(self):
+        global blocking_description, last_blocking_description
+        blocking_description.append(self.desc)
+        last_blocking_description = self.desc
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        global blocking_description, last_blocking_description
+        blocking_description.pop()
+        if len(blocking_description):
+            last_blocking_description = blocking_description[-1]
+        return False
+
+# just use this as a singleton, don't want to add even *more* overhead to things
+# that may be blocking...
+cached_blocking_ctx = BlockingDescriptionCtx()
+
+# use the context manager returned by this to explicitly mark some code as
+# potentially blocking, for logging purposes. Should have minimal overhead..
+def note_blocking(desc):
+    global cached_blocking_ctx
+    cached_blocking_ctx.desc = desc
+    return cached_blocking_ctx
+
+def annotate_blocking_note(a):
+    global last_blocking_description, blocking_description, _asyncio_available
+    if not _asyncio_available:
+        return # don't bother if no asyncio
+    if last_blocking_description:
+        last_blocking_description += a
+        # sanity check: don't let this accrue infinitely if it is called wrong
+        last_blocking_description = last_blocking_description[:100]
+    for i in range(len(blocking_description)):
+        blocking_description[i] += a
+
+# corresponding decorator, automatically uses function name
+def note_blocking_fun(f):
+    global _asyncio_available
+    if not _asyncio_available:
+        return f
+
+    def wrapped(*args, **kwargs):
+        with note_blocking(f.__qualname__):
+            return f(*args, **kwargs)
+    return wrapped
+
+def last_noted_blocker():
+    global last_blocking_description
+    return last_blocking_description
+
+_original_asyncio_run = None
+
+# this function based on code from aiodebug:
+#   https://gitlab.com/quantlane/libs/aiodebug
+# License: Apache 2.0
+def set_slow_callback_logging(slow_duration):
+    global _asyncio_available
+    if not _asyncio_available:
+        return
+
+    from webtiles import ws_handler
+
+    global _original_asyncio_run
+    if not slow_duration:
+        if _original_asyncio_run:
+            # de-monkeypatch
+            asyncio.events.Handle._run = _original_asyncio_run
+            _original_asyncio_run = None
+        return
+
+    def on_slow_callback(name, duration):
+        logger = logging.getLogger("server.py")
+        logger.warning('Slow callback (%.3fs, %s): %s. Socket state: %s',
+            duration, last_noted_blocker(), name, ws_handler.describe_sockets())
+        global last_blocking_description
+        last_blocking_description = "None"
+
+    if not _original_asyncio_run:
+        _original_asyncio_run = asyncio.events.Handle._run
+
+    def instrumented(self):
+        global _original_asyncio_run
+        t0 = time.monotonic()
+        return_value = _original_asyncio_run(self)
+        dt = time.monotonic() - t0
+        if dt >= slow_duration:
+            on_slow_callback(_format_handle(self), dt)
+        return return_value
+
+    asyncio.events.Handle._run = instrumented
+
 
 class TornadoFilter(logging.Filter):
     def filter(self, record):  # noqa A003: ignore shadowing builtin

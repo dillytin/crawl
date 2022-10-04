@@ -48,7 +48,7 @@ enum monster_type                      // env.mons[].type
 #endif
 #if TAG_MAJOR_VERSION > 34
     MONS_CRYSTAL_ECHIDNA,
-    MONS_PALENTONGA,
+    MONS_ARMATAUR,
 #endif
     MONS_JACKAL,
     MONS_HOUND,
@@ -367,6 +367,7 @@ enum monster_type                      // env.mons[].type
     MONS_ANIMATED_TREE,
     MONS_DEMONIC_PLANT,
     MONS_WITHERED_PLANT,
+    MONS_STARFLOWER,
 #endif
     MONS_BALLISTOMYCETE_SPORE,
     MONS_BALLISTOMYCETE,
@@ -377,7 +378,7 @@ enum monster_type                      // env.mons[].type
     MONS_GOBLIN,
     MONS_HOBGOBLIN,
     MONS_GNOLL,
-    MONS_GNOLL_SHAMAN,
+    MONS_GNOLL_BOUDA,
     MONS_GNOLL_SERGEANT,
     MONS_BOGGART,
     MONS_KOBOLD,
@@ -1122,7 +1123,7 @@ enum monster_type                      // env.mons[].type
     MONS_FOXFIRE,
     MONS_MAGGIE,
     MONS_NAMELESS,
-    MONS_PALENTONGA,
+    MONS_ARMATAUR,
     MONS_BLOATED_HUSK,
     MONS_BUNYIP,
     MONS_GOLIATH_FROG,
@@ -1175,6 +1176,7 @@ enum monster_type                      // env.mons[].type
     MONS_ZENATA,
     MONS_METEORAN,
     MONS_GRUNN,
+    MONS_STARFLOWER,
 #endif
 
     NUM_MONSTERS,               // used for polymorph

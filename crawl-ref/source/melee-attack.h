@@ -38,7 +38,7 @@ public:
     bool         cleaving;        // additional attack from cleaving
     bool         is_riposte;      // long blade retaliation attack
     bool         is_projected;    // projected weapon spell attack
-    int          roll_dist;       // palentonga rolling charge distance
+    int          charge_pow;      // electric charge bonus damage
     wu_jian_attack_type wu_jian_attack;
     int wu_jian_number_of_targets;
     coord_def attack_position;
@@ -118,9 +118,6 @@ private:
     /* Output methods */
     void set_attack_verb(int damage) override;
     void announce_hit() override;
-
-    /* Misc methods */
-    void handle_noise(const coord_def & pos);
 private:
     // Monster-attack specific stuff
     bool mons_attack_effects() override;
@@ -154,8 +151,11 @@ private:
     void player_stab_check() override;
     bool player_good_stab() override;
     void player_announce_aux_hit();
+    string charge_desc();
     void player_warn_miss();
     void player_weapon_upsets_god();
+    bool bad_attempt();
+    bool player_unrand_bad_attempt();
     void _defender_die();
 
     // Added in, were previously static methods of fight.cc

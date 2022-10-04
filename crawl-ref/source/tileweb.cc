@@ -1097,9 +1097,9 @@ void TilesFramework::_send_player(bool force_full)
         god = god_name(you.religion);
     _update_string(force_full, c.god, god, "god");
     _update_int(force_full, c.under_penance, (bool) player_under_penance(), "penance");
-    uint8_t prank = 0;
+    int prank = 0;
     if (you_worship(GOD_XOM))
-        prank = max(0, xom_favour_rank() - 1);
+        prank = xom_favour_rank() - 1;
     else if (!you_worship(GOD_NO_GOD))
         prank = max(0, piety_rank());
     else if (you.char_class == JOB_MONK && !you.has_mutation(MUT_FORLORN)
@@ -1242,7 +1242,7 @@ void TilesFramework::_send_player(bool force_full)
                 (int8_t) you.quiver_action.get()->get_item(), "quiver_item");
 
     _update_string(force_full, c.quiver_desc,
-                you.quiver_action.get()->quiver_description().to_colour_string(),
+                you.quiver_action.get()->quiver_description().to_colour_string(LIGHTGRAY),
                 "quiver_desc");
 
     _update_string(force_full, c.unarmed_attack,
@@ -1421,7 +1421,6 @@ void TilesFramework::send_doll(const dolls_data &doll, bool submerged, bool ghos
         TILEP_PART_ARM,
         TILEP_PART_HAIR,
         TILEP_PART_BEARD,
-        TILEP_PART_DRCHEAD,
         TILEP_PART_HELM,
         TILEP_PART_HAND1,
         TILEP_PART_HAND2,
@@ -1460,7 +1459,7 @@ void TilesFramework::send_doll(const dolls_data &doll, bool submerged, bool ghos
     }
 
     const bool is_ptng = is_player_tile(doll.parts[TILEP_PART_BASE],
-                                        TILEP_BASE_PALENTONGA);
+                                        TILEP_BASE_ARMATAUR);
 
     if (doll.parts[TILEP_PART_BOOTS] >= TILEP_BOOTS_CENTAUR_BARDING
         && doll.parts[TILEP_PART_BOOTS] <= TILEP_BOOTS_CENTAUR_BARDING_RED

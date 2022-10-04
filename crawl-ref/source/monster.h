@@ -17,7 +17,6 @@
 
 using std::vector;
 
-const int KRAKEN_TENTACLE_RANGE = 3;
 #define TIDE_CALL_TURN "tide-call-turn"
 
 #define MAX_DAMAGE_COUNTER 10000
@@ -456,8 +455,7 @@ public:
 
     bool has_attack_flavour(int flavour) const;
     bool has_damage_type(int dam_type);
-    int constriction_damage(bool direct) const override;
-    bool constriction_does_damage(bool direct) const override;
+    int constriction_damage(constrict_type typ) const override;
 
     bool can_throw_large_rocks() const override;
     bool can_speak();

@@ -194,7 +194,7 @@ NORETURN static void _launch_game();
 
 static void _do_berserk_no_combat_penalty();
 static void _do_wait_spells();
-static void _uncurl();
+
 static void _input();
 
 static void _safe_move_player(coord_def move);
@@ -769,8 +769,12 @@ static void _start_running(int dir, int mode)
     if (Hints.hints_events[HINT_SHIFT_RUN] && mode == RMODE_START)
         Hints.hints_events[HINT_SHIFT_RUN] = false;
 
-    if (!i_feel_safe(true))
+    if (!i_feel_safe(true)
+        || !can_rest_here(true)
+            && (mode == RMODE_REST_DURATION || mode == RMODE_WAIT_DURATION))
+    {
         return;
+    }
 
     const coord_def next_pos = you.pos() + Compass[dir];
 
@@ -1142,7 +1146,6 @@ static void _input()
         {
             if (you.berserk())
                 _do_berserk_no_combat_penalty();
-            _uncurl();
             world_reacts();
         }
 
@@ -1241,7 +1244,7 @@ static void _input()
         // binding, your turn may be ended by the first invoke of the
         // macro.
         if (!you.turn_is_over && cmd != CMD_NEXT_CMD)
-            process_command(cmd, real_prev_cmd);
+            ::process_command(cmd, real_prev_cmd);
 
         repeat_again_rec.paused = true;
 
@@ -1276,7 +1279,6 @@ static void _input()
             _do_berserk_no_combat_penalty();
 
         _do_wait_spells();
-        _uncurl();
 
         world_reacts();
     }
@@ -1321,7 +1323,7 @@ static bool _can_take_stairs(dungeon_feature_type ftype, bool down,
     }
 
     // Immobile
-    if (you.is_stationary())
+    if (!you.is_motile())
     {
         canned_msg(MSG_CANNOT_MOVE);
         return false;
@@ -1696,26 +1698,6 @@ static void _experience_check()
 #endif
 }
 
-static void _do_remove_armour()
-{
-    if (you.has_mutation(MUT_NO_ARMOUR))
-    {
-        mprf("You can't remove your %s, sorry.",
-                            species::skin_name(you.species).c_str());
-        return;
-    }
-
-    if (!form_can_wear())
-    {
-        mpr("You can't wear or remove anything in your present form.");
-        return;
-    }
-
-    int index = 0;
-    if (armour_prompt("Take off which item?", &index, OPER_TAKEOFF))
-        takeoff_armour(index);
-}
-
 static void _toggle_travel_speed()
 {
     you.travel_ally_pace = !you.travel_ally_pace;
@@ -1745,7 +1727,7 @@ static void _do_rest()
         return;
     }
 
-    if (i_feel_safe())
+    if (i_feel_safe() && can_rest_here())
     {
         if (you.is_sufficiently_rested(true) && ancestor_full_hp())
         {
@@ -1756,6 +1738,9 @@ static void _do_rest()
         else
             mpr("You start resting.");
     }
+    // intentional fallthrough for else case! Messaging is handled in
+    // _start_running, update the corresponding conditional there if you
+    // change this one.
 
     _start_running(RDIR_REST, RMODE_REST_DURATION);
 }
@@ -1919,7 +1904,11 @@ public:
     command_type cmd;
     GameMenu()
         : Menu(MF_SINGLESELECT | MF_ALLOW_FORMATTING
-                | MF_ARROWS_SELECT | MF_WRAP | MF_INIT_HOVER),
+                | MF_ARROWS_SELECT | MF_WRAP | MF_INIT_HOVER
+#ifdef USE_TILE_LOCAL
+                | MF_SPECIAL_MINUS // doll editor (why?)
+#endif
+                ),
           cmd(CMD_NO_CMD)
     {
         set_tag("game_menu");
@@ -1937,7 +1926,7 @@ public:
                 {
                     // recurse
                     if (c->cmd != CMD_NO_CMD)
-                        process_command(c->cmd, CMD_GAME_MENU);
+                        ::process_command(c->cmd, CMD_GAME_MENU);
                     return true;
                 }
                 // otherwise, exit menu and process in the main process_command call
@@ -1946,6 +1935,13 @@ public:
             }
             return true;
         };
+    }
+
+    bool skip_process_command(int keyin) override
+    {
+        if (keyin == '?')
+            return true; // hotkeyed
+        return Menu::skip_process_command(keyin);
     }
 
     void fill_entries()
@@ -2132,7 +2128,7 @@ void process_command(command_type cmd, command_type prev_cmd)
     case CMD_ADJUST_INVENTORY: adjust(); break;
 
     case CMD_SAFE_WAIT:
-        if (!i_feel_safe(true))
+        if (!i_feel_safe(true) && can_rest_here(true))
             break;
         // else fall-through
     case CMD_WAIT:
@@ -2153,16 +2149,15 @@ void process_command(command_type cmd, command_type prev_cmd)
     case CMD_LOOK_AROUND:          do_look_around();         break;
     case CMD_QUAFF:                drink();                  break;
     case CMD_READ:                 read();                   break;
-    case CMD_REMOVE_ARMOUR:        _do_remove_armour();      break;
+    case CMD_REMOVE_ARMOUR:        takeoff_armour();         break;
     case CMD_REMOVE_JEWELLERY:     remove_ring();            break;
     case CMD_SHOUT:                issue_orders();           break;
-    case CMD_THROW_ITEM_NO_QUIVER: throw_item_no_quiver();   break;
+    case CMD_FIRE_ITEM_NO_QUIVER:  fire_item_no_quiver();    break;
     case CMD_WEAPON_SWAP:          wield_weapon(true);       break;
     case CMD_WEAR_ARMOUR:          wear_armour();            break;
-    case CMD_WEAR_JEWELLERY:       puton_ring(-1);           break;
+    case CMD_WEAR_JEWELLERY:       puton_ring();             break;
     case CMD_WIELD_WEAPON:         wield_weapon(false);      break;
     case CMD_ZAP_WAND:             zap_wand();               break;
-
     case CMD_DROP:
         drop();
         break;
@@ -2800,16 +2795,6 @@ static void _do_wait_spells()
     handle_searing_ray();
     handle_maxwells_coupling();
     handle_flame_wave();
-}
-
-// palentongas uncurl at the start of the turn
-static void _uncurl()
-{
-    if (you.props[PALENTONGA_CURL_KEY].get_bool())
-    {
-        you.props[PALENTONGA_CURL_KEY] = false;
-        you.redraw_armour_class = true;
-    }
 }
 
 static void _safe_move_player(coord_def move)

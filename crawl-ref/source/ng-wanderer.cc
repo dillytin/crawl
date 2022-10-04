@@ -460,10 +460,11 @@ static void _decent_potion_or_scroll()
 {
     // vector of weighted {object_class_type, subtype} pairs
     // xxx: could we use is_useless_item here? (not without dummy items...?)
+    const int conceal_scr_type = item_for_set(ITEM_SET_CONCEAL_SCROLLS);
     const vector<pair<pair<object_class_type, int>, int>> options = {
         { { OBJ_SCROLLS, SCR_TELEPORTATION },
             you.stasis() ? 0 : 6 },
-        { { OBJ_SCROLLS, SCR_FOG }, 6 },
+        { { OBJ_SCROLLS, conceal_scr_type }, 6 },
         { { OBJ_SCROLLS, SCR_VULNERABILITY }, 2 },
         { { OBJ_SCROLLS, SCR_SILENCE }, 2 },
         { { OBJ_POTIONS, POT_CURING },
@@ -498,9 +499,10 @@ static void _wanderer_random_evokable()
     {
         const auto hex_wand_type = (wand_type)item_for_set(ITEM_SET_HEX_WANDS);
         const auto beam_wand_type = (wand_type)item_for_set(ITEM_SET_BEAM_WANDS);
+        const auto blast_wand_type = (wand_type)item_for_set(ITEM_SET_BLAST_WANDS);
         wand_type selected_wand =
               random_choose(hex_wand_type, WAND_MINDBURST, WAND_POLYMORPH,
-                            WAND_FLAME, WAND_ICEBLAST, beam_wand_type);
+                            WAND_FLAME, blast_wand_type, beam_wand_type);
         int charges;
         switch (selected_wand)
         {
@@ -509,6 +511,7 @@ static void _wanderer_random_evokable()
         case WAND_LIGHT:
         case WAND_QUICKSILVER:
         case WAND_ICEBLAST:
+        case WAND_ROOTS:
             charges = 2 + random2(3);
         break;
 

@@ -37,6 +37,7 @@
 #include "dlua.h"
 #include "end.h"
 #include "errors.h"
+#include "explore-greedy-options.h"
 #include "files.h"
 #include "game-options.h"
 #include "ghost.h"
@@ -360,7 +361,7 @@ const vector<GameOption*> game_options::build_options_list()
         new ListGameOption<text_pattern>(SIMPLE_NAME(auto_exclude)),
         new ListGameOption<text_pattern>(SIMPLE_NAME(explore_stop_pickup_ignore)),
         new ColourThresholdOption(hp_colour, {"hp_colour", "hp_color"},
-                                  "50:yellow, 25:red", _first_greater),
+                                  "70:yellow, 40:red", _first_greater),
         new ColourThresholdOption(mp_colour, {"mp_colour", "mp_color"},
                                   "50:yellow, 25:red", _first_greater),
         new ColourThresholdOption(stat_colour, {"stat_colour", "stat_color"},
@@ -448,6 +449,13 @@ const vector<GameOption*> game_options::build_options_list()
         new TileColGameOption(SIMPLE_NAME(tile_wall_col), "#666666"),
         new TileColGameOption(SIMPLE_NAME(tile_water_col), "#114455"),
         new TileColGameOption(SIMPLE_NAME(tile_window_col), "#558855"),
+        new MultipleChoiceGameOption<string>(
+            SIMPLE_NAME(tile_display_mode),
+            "tiles",
+            {{"tiles", "tiles"},
+             {"glyph", "glyphs"},
+             {"glyphs", "glyphs"},
+             {"hybrid", "hybrid"}}),
         new ListGameOption<string>(SIMPLE_NAME(tile_layout_priority),
 #ifdef TOUCH_UI
             split_string(",", "minimap, command, inventory, "
@@ -517,13 +525,6 @@ const vector<GameOption*> game_options::build_options_list()
             {{"horizontal", "horizontal"}, {"vertical", "vertical"}}),
         new IntGameOption(SIMPLE_NAME(action_panel_scale), 100, 20, 1600),
         new BoolGameOption(SIMPLE_NAME(action_panel_glyphs), false),
-        new MultipleChoiceGameOption<string>(
-            SIMPLE_NAME(tile_display_mode),
-            "tiles",
-            {{"tiles", "tiles"},
-             {"glyph", "glyphs"},
-             {"glyphs", "glyphs"},
-             {"hybrid", "hybrid"}}),
 #endif
 #ifdef USE_FT
         new BoolGameOption(SIMPLE_NAME(tile_font_ft_light), false),
@@ -1230,6 +1231,8 @@ void game_options::reset_options()
                               | ES_SHOP | ES_ALTAR | ES_RUNED_DOOR
                               | ES_TRANSPORTER | ES_GREEDY_PICKUP_SMART
                               | ES_GREEDY_VISITED_ITEM_STACK);
+
+    explore_greedy_visit    = (EG_GLOWING | EG_ARTEFACT);
 
     dump_item_origins      = IODS_ARTEFACTS;
 
@@ -2638,6 +2641,28 @@ int game_options::read_explore_stop_conditions(const string &field) const
     return conditions;
 }
 
+int game_options::read_explore_greedy_visit_conditions(const string &field) const
+{
+    int conditions = 0;
+    vector<string> stops = split_string(",", field);
+    for (const string &stop : stops)
+    {
+        const string c = replace_all_of(stop, " ", "_");
+        if (c == "glowing" || c == "glowing_item"
+                 || c == "glowing_items")
+        {
+            conditions |= EG_GLOWING;
+        }
+        else if (c == "artefact" || c == "artefacts"
+                 || c == "artifact" || c == "artifacts")
+            conditions |= EG_ARTEFACT;
+        else if (c == "stack" || c == "stacks"
+                 || c == "pile" || c == "piles")
+            conditions |= EG_STACK;
+    }
+    return conditions;
+}
+
 // Note the distinction between:
 // 1. aliases "ae := autopickup_exception" "ae += useless_item"
 //    stored in game_options.aliases.
@@ -2872,9 +2897,9 @@ static void _bindkey(string field)
         wchars.push_back(wc);
     }
 
+
     int key;
 
-    // TODO: Function keys.
     if (wchars.size() == 0)
     {
         mprf(MSGCH_ERROR, "No key in bindkey directive '%s'",
@@ -2883,18 +2908,6 @@ static void _bindkey(string field)
     }
     else if (wchars.size() == 1)
         key = wchars[0];
-    else if (wchars.size() == 2)
-    {
-        // Ctrl + non-ascii is meaningless here.
-        if (wchars[0] != '^' || wchars[1] > 127)
-        {
-            mprf(MSGCH_ERROR, "Invalid key '%s' in bindkey directive '%s'",
-                 key_str.c_str(), field.c_str());
-            return;
-        }
-
-        key = CONTROL(wchars[1]);
-    }
     else if (wchars[0] == '\\')
     {
         // does this need to validate non-widechars?
@@ -2906,11 +2919,18 @@ static void _bindkey(string field)
         }
         key = ks[0];
     }
-    else
+    else // if (wchars.size() > 1)
     {
-        mprf(MSGCH_ERROR, "Invalid key '%s' in bindkey directive '%s'",
-             key_str.c_str(), field.c_str());
-        return;
+        // XX probably would be safe to directly check for numbers?
+        // don't use the wide char version for this part
+        // Try to read a human-readable keycode. `^` sequences handled here.
+        key = read_key_code(key_str);
+        if (key == CK_NO_KEY)
+        {
+            mprf(MSGCH_ERROR, "Invalid key '%s' in bindkey directive '%s'",
+                 key_str.c_str(), field.c_str());
+            return;
+        }
     }
 
     const size_t start_name = field.find_first_not_of(' ', end_bracket + 1);
@@ -3620,6 +3640,17 @@ void game_options::read_option_line(const string &str, bool runscript)
         else
             explore_stop |= new_conditions;
     }
+    else if (key == "explore_greedy_visit")
+    {
+        if (plain)
+            explore_greedy_visit = EG_NONE;
+
+        const int new_conditions = read_explore_greedy_visit_conditions(field);
+        if (minus_equal)
+            explore_greedy_visit &= ~new_conditions;
+        else
+            explore_greedy_visit |= new_conditions;
+    }
     else if (key == "sound" || key == "hold_sound")
     {
         if (plain)
@@ -3805,7 +3836,7 @@ void game_options::read_option_line(const string &str, bool runscript)
         tile_tag_pref = _str_to_tag_pref(field.c_str());
 #endif // USE_TILE
 
-    else if (key == "bindkey")
+    else if (key == "bindkey" && runscript)
         _bindkey(field);
     else if (key == "constant")
     {
